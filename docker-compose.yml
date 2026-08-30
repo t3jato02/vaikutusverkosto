@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: vaikutusverkosto-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vaikutus
+      POSTGRES_PASSWORD: vaikutus
+      POSTGRES_DB: vaikutusverkosto
+    ports:
+      - "5434:5432"
+    volumes:
+      - vaikutus_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vaikutus -d vaikutusverkosto"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  vaikutus_pgdata:

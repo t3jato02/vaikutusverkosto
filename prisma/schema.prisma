@@ -1,0 +1,575 @@
+// Vaikutusverkosto — database schema
+// Postgres is the authoritative source of truth.
+// Model inspired by investigative graph models (FollowTheMoney).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- entities
+
+// Universal node: every Person / Organization / Company / GovernmentBody /
+// PoliticalParty / Association / Foundation / Union / MediaOrganization /
+// EducationalInstitution / Court / PublicAuthority / Project / Campaign /
+// Asset / Contract / Decision / Event / Source is an entity.
+enum EntityType {
+  PERSON
+  ORGANIZATION
+  COMPANY
+  GOVERNMENT_BODY
+  POLITICAL_PARTY
+  ASSOCIATION
+  FOUNDATION
+  UNION
+  MEDIA_ORGANIZATION
+  EDUCATIONAL_INSTITUTION
+  COURT
+  PUBLIC_AUTHORITY
+  PENSION_INSTITUTION
+  PROJECT
+  CAMPAIGN
+  ASSET
+  CONTRACT
+  DECISION
+  EVENT
+  OTHER
+}
+
+// PUBLIC confidence levels (section 18).
+enum Confidence {
+  VERIFIED
+  HIGH
+  MEDIUM
+  LOW
+  DISPUTED
+}
+
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+  FORMER
+  PROPOSED
+  UNKNOWN
+}
+
+model Entity {
+  id             String       @id @default(uuid()) @db.Uuid
+  type           EntityType
+  subtype        String?
+  canonicalName  String
+  description    String?      @db.Text
+  status         EntityStatus @default(ACTIVE)
+  startDate      DateTime?    @db.Date
+  endDate        DateTime?    @db.Date
+  jurisdiction   String? // "FI", "FI-helsinki", "EU", ...
+  municipality   String?
+  region         String?
+  country        String?
+  officialUrls   String[]     @default([])
+  sourceCount    Int          @default(0)
+  confidence     Confidence   @default(HIGH)
+  lastVerifiedAt DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // Per-type extension records
+  person        Person?
+  organization  Organization?
+
+  aliases       EntityAlias[]
+  externalIds   ExternalIdentifier[]
+  outRelations  Relationship[] @relation("RelSource")
+  inRelations   Relationship[] @relation("RelTarget")
+  outFlows      FinancialFlow[] @relation("FlowPayer")
+  inFlows       FinancialFlow[] @relation("FlowRecipient")
+  positions     Position[] @relation("PositionPerson")
+  orgPositions  Position[] @relation("PositionOrg")
+  decisions     Decision[] // institution decisions
+  votes         Vote[]
+  events        Event[]
+  entityChanges ChangeLog[]
+  corrections   Correction[]
+  sourceLinks   Evidence[]
+  replies       RightOfReply[]
+
+  @@index([canonicalName])
+  @@index([type, status])
+  @@index([municipality])
+  @@index([country])
+}
+
+model Person {
+  entityId            String   @id @db.Uuid
+  entity              Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  birthYear           Int?
+  profession          String?
+  partyEntityId       String?  @db.Uuid
+  electoralDistrict   String?
+  education           String?
+  imageUrl            String?
+  firstName           String?
+  lastName            String?
+  hetekaId            Int? // Eduskunta identifier
+  @@index([hetekaId])
+  @@index([partyEntityId])
+}
+
+model Organization {
+  entityId            String   @id @db.Uuid
+  entity              Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  registrationNumber  String?
+  legalForm           String?
+  foundingYear        Int?
+  headquarters        String?
+  employeeCount       Int?
+  revenueEur          Decimal? @db.Decimal(18, 2)
+  @@index([registrationNumber])
+}
+
+model EntityAlias {
+  id        String   @id @default(uuid()) @db.Uuid
+  entityId  String   @db.Uuid
+  entity    Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  name      String
+  language  String?  // fi / en / sv / null (any)
+  aliasType String   @default("NAME_VARIANT") // NAME_VARIANT, TRANSLITERATION, PREVIOUS_NAME, COMMON_NAME
+  @@unique([entityId, name, aliasType])
+  @@index([name])
+}
+
+model ExternalIdentifier {
+  id         String   @id @default(uuid()) @db.Uuid
+  entityId   String   @db.Uuid
+  entity     Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  provider   String   // eduskunta, ytj, prh, wikipedia, ...
+  identifier String
+  @@unique([provider, identifier])
+  @@index([provider])
+}
+
+// ---------------------------------------------------------------- relationships
+
+enum RelationshipType {
+  OWNS
+  BENEFICIAL_OWNER_OF
+  BOARD_MEMBER_OF
+  CHAIRS
+  EMPLOYED_BY
+  APPOINTED_BY
+  APPOINTED_TO
+  MEMBER_OF
+  FORMER_MEMBER_OF
+  ADVISER_TO
+  DONATED_TO
+  FUNDED_BY
+  FUNDS
+  RECEIVED_GRANT_FROM
+  PAID
+  CONTRACTED_WITH
+  SUPPLIER_TO
+  INVESTED_IN
+  SHAREHOLDER_OF
+  REPRESENTS
+  LOBBIED
+  MET_WITH
+  SUPPORTED
+  PARTNERED_WITH
+  VOTED_FOR
+  VOTED_AGAINST
+  ABSTAINED
+  INTRODUCED
+  SIGNED
+  DECIDED
+  SUPERVISES
+  REGULATES
+  AUDITS
+  OWNS_MEDIA
+  FAMILY_RELATION
+  PART_OF
+  CANDIDATE_OF
+  SITS_IN
+}
+
+enum VerificationState {
+  PENDING
+  PROPOSED
+  PUBLISHED
+  REJECTED
+  CONFLICTED
+}
+
+model Relationship {
+  id               String            @id @default(uuid()) @db.Uuid
+  sourceEntityId   String            @db.Uuid
+  targetEntityId   String            @db.Uuid
+  sourceEntity     Entity            @relation("RelSource", fields: [sourceEntityId], references: [id], onDelete: Cascade)
+  targetEntity     Entity            @relation("RelTarget", fields: [targetEntityId], references: [id], onDelete: Cascade)
+  relationshipType RelationshipType
+  startDate        DateTime?         @db.Date
+  endDate          DateTime?         @db.Date
+  amount           Decimal?          @db.Decimal(18, 2)
+  currency         String?
+  percentage       Decimal?          @db.Decimal(6, 2)
+  role             String?
+  description      String?           @db.Text
+  status           EntityStatus      @default(ACTIVE)
+  confidence       Confidence        @default(HIGH)
+  evidenceStrength String? // "single_source" | "multiple_primary" | ...
+  verificationState VerificationState @default(PUBLISHED)
+  firstSeen        DateTime?         @default(now())
+  lastVerifiedAt   DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  createdBy        String? // agent name or "human"
+
+  evidence         Evidence[]
+  changeLogs       ChangeLog[]
+  verificationQueue VerificationQueue[]
+
+  @@index([sourceEntityId])
+  @@index([targetEntityId])
+  @@index([relationshipType])
+  @@index([sourceEntityId, relationshipType])
+}
+
+// ---------------------------------------------------------------- money flows
+
+enum FlowType {
+  POLITICAL_DONATION
+  CAMPAIGN_FUNDING
+  PUBLIC_GRANT
+  GOVERNMENT_SUBSIDY
+  MUNICIPAL_GRANT
+  EU_FUNDING
+  PROCUREMENT
+  CONSULTING_PAYMENT
+  BOARD_REMUNERATION
+  SALARY
+  EXECUTIVE_COMPENSATION
+  INVESTMENT
+  OWNERSHIP
+  SPONSORSHIP
+  RESEARCH_FUNDING
+  FOUNDATION_GRANT
+  ASSOCIATION_FUNDING
+  PUBLIC_PROJECT_FUNDING
+  OTHER
+}
+
+model FinancialFlow {
+  id                        String   @id @default(uuid()) @db.Uuid
+  payerEntityId             String   @db.Uuid
+  recipientEntityId         String   @db.Uuid
+  payerEntity               Entity   @relation("FlowPayer", fields: [payerEntityId], references: [id], onDelete: Cascade)
+  recipientEntity           Entity   @relation("FlowRecipient", fields: [recipientEntityId], references: [id], onDelete: Cascade)
+  intermediaryEntityId      String?  @db.Uuid
+  ultimateBeneficiaryEntityId String? @db.Uuid
+  amount                    Decimal  @db.Decimal(18, 2)
+  currency                  String   @default("EUR")
+  flowDate                  DateTime? @db.Date
+  periodStart               DateTime? @db.Date
+  periodEnd                 DateTime? @db.Date
+  flowType                  FlowType
+  purpose                   String?  @db.Text
+  description               String?  @db.Text
+  confidence                Confidence @default(HIGH)
+  verificationState         VerificationState @default(PUBLISHED)
+  sourceCount               Int      @default(1)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  evidence                  Evidence[]
+  changeLogs                ChangeLog[]
+  verificationQueue         VerificationQueue[]
+
+  @@index([payerEntityId])
+  @@index([recipientEntityId])
+  @@index([flowType])
+  @@index([flowDate])
+  @@index([currency])
+}
+
+// ---------------------------------------------------------------- positions
+
+model Position {
+  id              String        @id @default(uuid()) @db.Uuid
+  personEntityId  String        @db.Uuid
+  personEntity    Entity        @relation("PositionPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  organizationEntityId String?  @db.Uuid
+  organizationEntity Entity?    @relation("PositionOrg", fields: [organizationEntityId], references: [id], onDelete: SetNull)
+  role            String
+  startDate       DateTime?     @db.Date
+  endDate         DateTime?     @db.Date
+  isCurrent       Boolean       @default(true)
+  sourceId        String?       @db.Uuid
+  source          Source?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([personEntityId])
+  @@index([organizationEntityId])
+}
+
+// ---------------------------------------------------------------- decisions & votes
+
+model Decision {
+  id                String   @id @default(uuid()) @db.Uuid
+  title             String
+  institutionEntityId String? @db.Uuid
+  institutionEntity Entity?  @relation(fields: [institutionEntityId], references: [id], onDelete: SetNull)
+  decisionDate      DateTime? @db.Date
+  decisionType      String?
+  description       String?  @db.Text
+  legalBasis        String?
+  financialValue    Decimal? @db.Decimal(18, 2)
+  currency          String?
+  affectedSectors   String[] @default([])
+  affectedRegions   String[] @default([])
+  sourceId          String?  @db.Uuid
+  source            Source?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  confidence        Confidence @default(HIGH)
+  votes             Vote[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([institutionEntityId])
+  @@index([decisionDate])
+}
+
+enum VoteChoice {
+  FOR
+  AGAINST
+  ABSTAIN
+  ABSENT
+}
+
+model Vote {
+  id            String      @id @default(uuid()) @db.Uuid
+  decisionId    String      @db.Uuid
+  decision      Decision    @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  personEntityId String     @db.Uuid
+  personEntity  Entity      @relation(fields: [personEntityId], references: [id], onDelete: Cascade)
+  choice        VoteChoice
+  @@unique([decisionId, personEntityId])
+  @@index([personEntityId])
+}
+
+// ---------------------------------------------------------------- events
+
+model Event {
+  id          String    @id @default(uuid()) @db.Uuid
+  entityId    String    @db.Uuid
+  entity      Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  eventType   String
+  eventDate   DateTime? @db.Date
+  description String?   @db.Text
+  sourceId    String?   @db.Uuid
+  source      Source?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@index([entityId, eventDate])
+}
+
+// ---------------------------------------------------------------- sources & evidence
+
+enum SourceType {
+  OFFICIAL_PRIMARY
+  OFFICIAL_REGISTER
+  COURT_DOCUMENT
+  PARLIAMENTARY_RECORD
+  COMPANY_DISCLOSURE
+  ANNUAL_REPORT
+  PROCUREMENT_RECORD
+  ORGANIZATION_DISCLOSURE
+  ACADEMIC_SOURCE
+  REPUTABLE_MEDIA
+  SECONDARY_MEDIA
+  OTHER
+}
+
+model Source {
+  id             String     @id @default(uuid()) @db.Uuid
+  sourceUrl      String
+  sourceName     String
+  publisher      String?
+  publicationDate DateTime? @db.Date
+  retrievedAt    DateTime? @default(now())
+  documentTitle  String?
+  sourceType     SourceType @default(OTHER)
+  confidence     Confidence @default(HIGH)
+  archivedHash   String?
+  parserVersion  String?
+  lastCheckedAt  DateTime?
+  lastChangedAt  DateTime?
+  createdAt      DateTime   @default(now())
+
+  evidence       Evidence[]
+  positions      Position[]
+  decisions      Decision[]
+  events         Event[]
+  agentRuns      AgentRun[]
+
+  @@unique([sourceUrl])
+  @@index([sourceType])
+}
+
+// Evidence links a fact (relationship / flow / decision) to its source.
+model Evidence {
+  id               String        @id @default(uuid()) @db.Uuid
+  relationshipId   String?       @db.Uuid
+  relationship     Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  flowId           String?       @db.Uuid
+  flow             FinancialFlow? @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  entityId         String?       @db.Uuid
+  entity           Entity?       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  sourceId         String        @db.Uuid
+  source           Source        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  quotedFragment   String?       @db.Text
+  page             String?
+  documentTitle    String?
+  parserVersion    String?
+  confidence       Confidence    @default(HIGH)
+  createdAt        DateTime      @default(now())
+
+  @@index([relationshipId])
+  @@index([flowId])
+  @@index([entityId])
+  @@index([sourceId])
+}
+
+// ---------------------------------------------------------------- agents & ops
+
+model AgentRun {
+  id              String   @id @default(uuid()) @db.Uuid
+  agent           String
+  startedAt       DateTime @default(now())
+  finishedAt      DateTime?
+  sourceId        String?  @db.Uuid
+  source          Source?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  recordsScanned  Int      @default(0)
+  factsProposed   Int      @default(0)
+  factsAccepted   Int      @default(0)
+  factsRejected   Int      @default(0)
+  errors          Int      @default(0)
+  status          String   @default("RUNNING") // RUNNING | SUCCESS | PARTIAL | FAILED
+  details         String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  findings        AgentFinding[]
+
+  @@index([agent, startedAt])
+}
+
+model AgentFinding {
+  id          String    @id @default(uuid()) @db.Uuid
+  runId       String    @db.Uuid
+  run         AgentRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  findingType String // RELATIONSHIP_ADDED, POSITION_CHANGED, ...
+  summary     String?   @db.Text
+  data        Json?
+  createdAt   DateTime  @default(now())
+}
+
+model VerificationQueue {
+  id              String        @id @default(uuid()) @db.Uuid
+  relationshipId  String?       @db.Uuid
+  relationship    Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  flowId          String?       @db.Uuid
+  flow            FinancialFlow? @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  entityId        String?       @db.Uuid
+  priority        Int           @default(5)
+  status          String        @default("PENDING") // PENDING | APPROVED | REJECTED
+  reason          String?       @db.Text
+  createdAt       DateTime      @default(now())
+  resolvedAt      DateTime?
+  resolvedBy      String?
+}
+
+// ---------------------------------------------------------------- change feed
+
+enum ChangeEventType {
+  RELATIONSHIP_ADDED
+  RELATIONSHIP_ENDED
+  AMOUNT_CHANGED
+  POSITION_CHANGED
+  OWNER_CHANGED
+  NEW_APPOINTMENT
+  NEW_GRANT
+  NEW_CONTRACT
+  NEW_VOTE
+  ENTITY_ADDED
+  ENTITY_UPDATED
+  SOURCE_ADDED
+  IDENTITY_MERGED
+}
+
+model ChangeLog {
+  id            String          @id @default(uuid()) @db.Uuid
+  eventType     ChangeEventType
+  entityId      String?         @db.Uuid
+  entity        Entity?         @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  relationshipId String?        @db.Uuid
+  relationship  Relationship?   @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  flowId        String?         @db.Uuid
+  flow          FinancialFlow?  @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  sourceId      String?         @db.Uuid
+  description   String?         @db.Text
+  beforeData    Json?
+  afterData     Json?
+  occurredAt    DateTime        @default(now())
+  createdAt     DateTime        @default(now())
+
+  @@index([occurredAt])
+  @@index([entityId])
+  @@index([eventType])
+}
+
+// ---------------------------------------------------------------- corrections & methodology
+
+enum CorrectionStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  DUPLICATE
+}
+
+model Correction {
+  id           String           @id @default(uuid()) @db.Uuid
+  entityId     String?          @db.Uuid
+  entity       Entity?          @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  reporter     String?
+  reporterEmail String?
+  category     String // incorrect_person | wrong_relationship | outdated_role | incorrect_amount | missing_source | identity_collision | other
+  description  String?          @db.Text
+  status       CorrectionStatus @default(SUBMITTED)
+  moderationHistory Json?
+  createdAt    DateTime         @default(now())
+  resolvedAt   DateTime?
+  @@index([status])
+}
+
+model MethodologyVersion {
+  id        String   @id @default(uuid()) @db.Uuid
+  version   String
+  title     String
+  content   String   @db.Text
+  publishedAt DateTime @default(now())
+  @@unique([version])
+}
+
+model RightOfReply {
+  id          String   @id @default(uuid()) @db.Uuid
+  entityId    String   @db.Uuid
+  entity      Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  responder   String
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+  isEntityResponse Boolean @default(true)
+  @@index([entityId])
+}
