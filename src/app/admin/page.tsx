@@ -37,8 +37,7 @@ export default async function AdminPage() {
         <div>
           <h1 className="text-xl font-bold">Hallinta / tutkijanäkymä</h1>
           <p className="mt-1 text-sm text-ink-500">
-            Tiedon kattavuus, agenttien ajot ja korjausjono. Pääsynvalvonta (RLS + roolit) on
-            tuotantokäyttöön suunniteltu (vaihe D).
+            Tiedon kattavuus, agenttien ajot, lähdeterveys ja korjausjono.
           </p>
         </div>
         <nav className="flex flex-wrap gap-2 text-xs">

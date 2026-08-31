@@ -243,8 +243,13 @@ export default async function PersonPage({ params }: { params: Promise<{ slug: s
                   {formatDate(r.startDate)} — {r.endDate ? formatDate(r.endDate) : "nykyhetki"}
                 </span>
                 {r.evidence[0]?.source && (
-                  <a href={r.evidence[0].source.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-                    lähde
+                  <a
+                    href={r.evidence[0].source.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded bg-ink-100 px-1.5 py-0.5 text-[11px] font-medium text-accent hover:bg-ink-200"
+                  >
+                    Näytä lähde
                   </a>
                 )}
               </div>

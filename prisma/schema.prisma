@@ -274,6 +274,7 @@ model FinancialFlow {
   flowDate                  DateTime? @db.Date
   periodStart               DateTime? @db.Date
   periodEnd                 DateTime? @db.Date
+  periodYear                Int?
   flowType                  FlowType
   purpose                   String?  @db.Text
   description               String?  @db.Text
@@ -406,6 +407,10 @@ model Source {
   parserVersion  String?
   lastCheckedAt  DateTime?
   lastChangedAt  DateTime?
+  // Source health (Phase 15): status + consecutive failure tracking.
+  status            String   @default("ACTIVE") // ACTIVE | DEGRADED | FAILED | DISABLED
+  consecutiveFailures Int   @default(0)
+  lastSuccessAt     DateTime?
   createdAt      DateTime   @default(now())
 
   evidence       Evidence[]
@@ -455,14 +460,22 @@ model AgentRun {
   factsProposed   Int      @default(0)
   factsAccepted   Int      @default(0)
   factsRejected   Int      @default(0)
+  recordsCreated  Int      @default(0)
+  recordsUpdated  Int      @default(0)
   errors          Int      @default(0)
-  status          String   @default("RUNNING") // RUNNING | SUCCESS | PARTIAL | FAILED
+  cost            Decimal? @db.Decimal(10, 4)
+  status          String   @default("RUNNING") // RUNNING | SUCCESS | PARTIAL | FAILED | SKIPPED
   details         String?  @db.Text
+  metadata        Json?
+  // Run-lock fields: prevents overlapping runs of the same agent.
+  lockToken       String?  @db.Uuid
+  lockUntil       DateTime?
   createdAt       DateTime @default(now())
 
   findings        AgentFinding[]
 
   @@index([agent, startedAt])
+  @@index([status, startedAt])
 }
 
 model AgentFinding {

@@ -10,6 +10,16 @@ import { PrismaClient, EntityType, FlowType } from "@prisma/client";
 const prisma = new PrismaClient();
 const DEMO_TAG = "DEMO";
 
+// P4: fictional money flows must NEVER appear in production data.
+// This script refuses to run when NODE_ENV=production or VERCEL is set.
+if (process.env.NODE_ENV === "production" || process.env.VERCEL === "1") {
+  console.error(
+    "REFUSED: demo seed cannot run in a production environment. " +
+      "Fictional money flows must never be inserted into production data.",
+  );
+  process.exit(1);
+}
+
 async function demoEntity(name: string, type: EntityType, subtype?: string) {
   const existing = await prisma.entity.findFirst({
     where: { canonicalName: name, description: { contains: DEMO_TAG } },

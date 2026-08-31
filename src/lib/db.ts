@@ -1,4 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { assertEnvValid } from "./env";
+
+assertEnvValid();
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 

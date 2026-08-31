@@ -344,6 +344,17 @@ export async function getLatestAgentRuns(limit = 10) {
   });
 }
 
+export async function getStats() {
+  const [persons, organizations, verifiedRelationships, sources, flows] = await Promise.all([
+    db.entity.count({ where: { type: "PERSON" } }),
+    db.entity.count({ where: { NOT: { type: "PERSON" } } }),
+    db.relationship.count({ where: { verificationState: "PUBLISHED" } }),
+    db.source.count(),
+    db.financialFlow.count(),
+  ]);
+  return { persons, organizations, verifiedRelationships, sources, flows };
+}
+
 // ---------------------------------------------------------------- url helper
 
 export function entityUrlFor(id: string, type: EntityType, name: string): string {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isAdminSession } from "@/lib/auth";
 
 const NAV = [
   { href: "/explore", label: "Tutki" },
@@ -7,10 +8,12 @@ const NAV = [
   { href: "/map", label: "Kartta" },
   { href: "/changes", label: "Muutokset" },
   { href: "/methodology", label: "Menetelmät" },
-  { href: "/sources", label: "Lähteet" },
 ];
 
-export default function Header() {
+export const dynamic = "force-dynamic";
+
+export default async function Header() {
+  const admin = await isAdminSession();
   return (
     <header className="border-b border-ink-100 bg-white">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
@@ -29,11 +32,25 @@ export default function Header() {
                 {n.label}
               </Link>
             ))}
+            <Link href="/sources" className="nav-link">
+              Lähteet
+            </Link>
           </nav>
         </div>
-        <Link href="/search" className="btn text-sm">
-          Haku
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/search" className="btn text-sm">
+            Haku
+          </Link>
+          {admin ? (
+            <Link href="/admin" className="btn text-sm" aria-label="Ylläpito">
+              Ylläpito
+            </Link>
+          ) : (
+            <Link href="/login" className="nav-link text-sm" aria-label="Kirjaudu">
+              Kirjaudu
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   );

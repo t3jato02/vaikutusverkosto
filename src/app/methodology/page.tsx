@@ -14,6 +14,15 @@ export default function MethodologyPage() {
         </p>
       </header>
 
+      <Section id="what-this-is-not" title="Tärkeät rajaukset">
+        <ul className="list-disc space-y-2 pl-5">
+          <li><strong>Yhteys ei automaattisesti todista vaikutusvaltaa.</strong> Dokumentoitu yhteys (esim. hallitusjäsenyys tai rahoitussuhde) kuvaa rakennetta, ei sen käyttöä.</li>
+          <li><strong>Verkoston läheisyys ei todista väärinkäytöstä.</strong> Lähellä verkossa oleminen ei tarkoita yhteistoimintaa tai rikkomusta.</li>
+          <li><strong>Rahoitussuhde ei automaattisesti tarkoita eturistiriitaa.</strong> Rahavirta on dokumentoitu tosiasia; sen tulkinta kuuluu lukijalle ja viranomaisille.</li>
+          <li><strong>Johdettu mittari ei ole syytös.</strong> Mittarit ovat läpinäkyviä laskennallisia tunnuslukuja, eivät arvioita henkilön toiminnasta.</li>
+        </ul>
+      </Section>
+
       <Section id="relationships" title="Mikä lasketaan yhteydeksi">
         <p>
           Yhteys (relationship) on dokumentoitu suhde kahden toimijan välillä: esimerkiksi
@@ -91,6 +100,23 @@ export default function MethodologyPage() {
           päätös ja lähde. Aggregointi (vuosi, organisaatio, sektori, kunta, puolue) on sallittua,
           mutta eri virta-tyyppejä ei lasketa yhteen ilman avointa laskentatapaa. Kaikki
           rahasummat sisältävät valuutan.
+        </p>
+        <p>
+          <strong>Julkiset hankinnat (Tutki hankintoja):</strong> hankintavirrat ovat
+          vuosittaisia kokonaisarvoja, jotka Suomen julkinen hankintatoimi on maksanut
+          toimittajille. Maksajana näytetään aggregaatti &ldquo;Julkiset hankinnat – Suomi&rdquo;,
+          koska lähde ei erittele virtaa yksittäiseen hankintayksikköön tällä rajapinnalla.
+          Luottamukselliset toimittajat (esim. &ldquo;Salassa pidettävä&rdquo;) eivät koskaan
+          päädy julkiseen dataan. Summa on lähdeperustainen kokonaisarvo, ei yksittäinen sopimus.
+        </p>
+      </Section>
+
+      <Section id="procurement" title="Hankintadata">
+        <p>
+          Hankintavirrat perustuvat Valtiovarainministeriön ylläpitämään
+          <a href="https://tutkihankintoja.fi/" target="_blank" rel="noreferrer" className="text-accent hover:underline"> tutkihankintoja.fi</a>-palveluun.
+          Lähde on virallinen julkinen palvelu, josta kaikki hankintatiedot ovat kansalaisten
+          tutkittavissa. Jokainen virta sisältää lähteen, noutoajan ja laskentatavan.
         </p>
       </Section>
 

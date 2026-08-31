@@ -2,8 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { getMoneyAggregates, entityUrlFor } from "@/lib/queries";
 import { FLOW_TYPE_LABELS } from "@/lib/constants";
-import { formatEur, formatDate } from "@/lib/format";
-import { DemoBadge } from "@/components/badges";
+import { formatEur } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +27,7 @@ export default async function MoneyPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-500">
           Dokumentoidut rahavirrat: lahjoitukset, avustukset, hankinnat, sijoitukset ja korvaukset.
           Summat esitetään lähdeperustaisesti; eri virta-tyyppejä ei lasketa yhteen ilman
-          avointa laskentatapaa.
+          avointa laskentatapaa. Järjestelmä ei näytä esimerkkirahavirtoja tuotantodatana.
         </p>
       </header>
 
@@ -36,7 +35,10 @@ export default async function MoneyPage() {
         <h2 className="card-title mb-2">VIRRAT TYYPIN MUKAAN</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {aggregates.byType.length === 0 && (
-            <p className="col-span-full text-sm text-ink-500">Ei rahavirtoja.</p>
+            <p className="col-span-full text-sm text-ink-500">
+              Varmennettuja rahavirtoja lisätään lähde kerrallaan. Järjestelmä ei näytä
+              esimerkkirahavirtoja tuotantodatana.
+            </p>
           )}
           {aggregates.byType.map((t) => (
             <div key={t.flowType} className="card">
@@ -62,11 +64,11 @@ export default async function MoneyPage() {
         <ul className="card divide-y divide-ink-100">
           {flows.length === 0 && (
             <li className="py-4 text-sm text-ink-500">
-              Ei rahavirtoja. (Demodata näkyy merkintänä &ldquo;DEMO&rdquo;.)
+              Varmennettuja rahavirtoja lisätään lähde kerrallaan. Järjestelmä ei näytä
+              esimerkkirahavirtoja tuotantodatana.
             </li>
           )}
           {flows.map((f) => {
-            const isDemo = f.description?.includes("DEMO") || f.purpose?.includes("(demo)");
             return (
               <li key={f.id} id={`flow-${f.id}`} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <div className="min-w-0">
@@ -78,18 +80,19 @@ export default async function MoneyPage() {
                     <Link href={entityUrlFor(f.recipientEntity.id, f.recipientEntity.type, f.recipientEntity.canonicalName)} className="font-medium text-ink-900 hover:text-accent">
                       {f.recipientEntity.canonicalName}
                     </Link>
-                    {isDemo && <DemoBadge />}
                   </div>
                   <div className="mt-0.5 text-xs text-ink-500">
                     {FLOW_TYPE_LABELS[f.flowType]?.fi} · {f.purpose}
+                    {f.periodStart && (
+                      <span className="text-ink-300"> · jakso: {f.periodStart.getFullYear()}</span>
+                    )}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-4 text-sm">
                   <span className="font-semibold tabular-nums text-ink-900">{formatEur(f.amount)}</span>
-                  <span className="text-xs text-ink-500">{formatDate(f.flowDate ?? f.periodStart)}</span>
                   {f.evidence[0]?.source && (
-                    <a href={f.evidence[0].source.sourceUrl} target="_blank" rel="noreferrer" className="text-[11px] text-accent hover:underline">
-                      lähde
+                    <a href={f.evidence[0].source.sourceUrl} target="_blank" rel="noreferrer" className="rounded bg-ink-100 px-1.5 py-0.5 text-[11px] font-medium text-accent hover:bg-ink-200">
+                      Näytä lähde
                     </a>
                   )}
                 </div>
