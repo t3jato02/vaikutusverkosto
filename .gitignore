@@ -31,6 +31,9 @@ next-env.d.ts
 
 # tests
 /coverage
+/playwright-report
+/test-results/
+e2e_out.txt
 
 # prisma
 /prisma/dev.db

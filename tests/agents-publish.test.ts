@@ -104,6 +104,31 @@ describe("entity resolution identity collisions (P9)", () => {
     await db.entity.deleteMany({ where: { id: { in: [aId, bId] } } });
   });
 
+  it.skipIf(!db)("resolves to one identity under concurrent create races (P6 fix)", async () => {
+    if (!db) return;
+    const provider = "test-race-idp";
+    const identifier = `race-${Date.now()}`;
+    await db.externalIdentifier.deleteMany({ where: { provider } });
+
+    // Same strong ID resolved concurrently must always produce the SAME entity,
+    // even though only one create can win the unique constraint.
+    const ref = {
+      type: EntityType.ORGANIZATION,
+      name: `Racy Osuuskunta ${Date.now()}`,
+      jurisdiction: "FI",
+      externalId: { provider, identifier },
+    };
+    const outcomes = await Promise.all(Array.from({ length: 8 }, () => resolveEntity(db, ref)));
+    const ids = outcomes.filter((o) => o.status === "matched").map((o) => (o as { entityId: string }).entityId);
+    expect(ids.length).toBe(8);
+    expect(new Set(ids).size).toBe(1);
+
+    // Cleanup test data.
+    const id = ids[0];
+    await db.externalIdentifier.deleteMany({ where: { provider } });
+    await db.entity.deleteMany({ where: { id } });
+  });
+
   it("resolves by business ID with priority over name", () => {
     // Pure unit-level: business ID normalization is handled in the resolver; we assert
     // the function exists and requires no silent merge when names collide.

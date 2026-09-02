@@ -54,12 +54,12 @@ export default async function ExplorePage() {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section id="valiokunnat">
+        <section id="valiokunnat" className="min-w-0">
           <h2 className="card-title mb-2">ENITEN JÄSENIÄ — VALIOKUNNAT</h2>
           <ul className="card divide-y divide-ink-100">
             {committees.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
-                <Link href={entityUrlFor(c.id, "ORGANIZATION", c.canonicalName)} className="truncate text-sm font-medium text-ink-900 hover:text-accent">
+                <Link href={entityUrlFor(c.id, "ORGANIZATION", c.canonicalName)} className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900 hover:text-accent">
                   {c.canonicalName}
                 </Link>
                 <span className="shrink-0 text-sm tabular-nums text-ink-500">{c.members} jäsentä</span>
@@ -68,12 +68,12 @@ export default async function ExplorePage() {
           </ul>
         </section>
 
-        <section id="puolueet">
+        <section id="puolueet" className="min-w-0">
           <h2 className="card-title mb-2">PUOLUEET KANSANEDUSTAJIEN MUKAAN</h2>
           <ul className="card divide-y divide-ink-100">
             {parties.map((p) => (
               <li key={p.partyEntityId ?? "?"} className="flex items-center justify-between gap-3 py-2.5">
-                <span className="truncate text-sm font-medium text-ink-900">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">
                   {partyNames.get(p.partyEntityId!) ?? "—"}
                 </span>
                 <span className="shrink-0 text-sm tabular-nums text-ink-500">
@@ -95,7 +95,7 @@ export default async function ExplorePage() {
           <ul className="card divide-y divide-ink-100">
             {money.byType.map((t) => (
               <li key={t.flowType} className="flex items-center justify-between gap-3 py-2.5">
-                <span className="text-sm font-medium text-ink-900">
+                <span className="min-w-0 flex-1 text-sm font-medium text-ink-900">
                   {FLOW_TYPE_LABELS[t.flowType]?.fi ?? t.flowType}
                 </span>
                 <span className="shrink-0 text-sm font-semibold tabular-nums">
@@ -107,7 +107,7 @@ export default async function ExplorePage() {
         )}
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-4">
+      <div className="grid gap-6 min-w-0 lg:grid-cols-4">
         <PhaseCard id="yritykset" title="Yritysvalta" desc="Yritykset, hallitukset, omistus. YTJ- ja PRH-käsittely tulossa (vaihe B)." />
         <PhaseCard id="elake" title="Eläkevalta" desc="Eläkelaitosten johto, hallitukset ja sijoitukset. Vaihe A/B." />
         <PhaseCard id="media" title="Media" desc="Mediaomistus ja johto. Vaihe B." />

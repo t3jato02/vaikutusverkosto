@@ -6,6 +6,7 @@
 //      → only if exactly ONE candidate; if multiple → ambiguous (rejected)
 //   4. Create new entity (never auto-merge).
 
+import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { EntityRef } from "./types";
 
@@ -76,25 +77,40 @@ async function createEntity(
   name: string,
   resolvedBusinessId?: { businessId: string },
 ): Promise<ResolveOutcome> {
-  const created = await db.entity.create({
-    data: {
-      type: ref.type,
-      canonicalName: name,
-      subtype: ref.subtype ?? undefined,
-      jurisdiction: ref.jurisdiction ?? "FI",
-      municipality: ref.municipality ?? null,
-      country: "FI",
-      description: ref.description ?? null,
-      confidence: "HIGH",
-      sourceCount: 1,
-      aliases: ref.alias && ref.alias !== name ? { create: [{ name: ref.alias, aliasType: "NAME_VARIANT" }] } : undefined,
-      externalIds:
-        ref.externalId?.provider && ref.externalId.identifier
-          ? { create: { provider: ref.externalId.provider, identifier: ref.externalId.identifier } }
-          : resolvedBusinessId
-            ? { create: { provider: "ytj", identifier: resolvedBusinessId.businessId } }
-            : undefined,
-    },
-  });
-  return { status: "matched", entityId: created.id, created: true };
+  const strongId =
+    ref.externalId?.provider && ref.externalId.identifier
+      ? { provider: ref.externalId.provider, identifier: ref.externalId.identifier }
+      : resolvedBusinessId
+        ? { provider: "ytj", identifier: resolvedBusinessId.businessId }
+        : null;
+  try {
+    const created = await db.entity.create({
+      data: {
+        type: ref.type,
+        canonicalName: name,
+        subtype: ref.subtype ?? undefined,
+        jurisdiction: ref.jurisdiction ?? "FI",
+        municipality: ref.municipality ?? null,
+        country: "FI",
+        description: ref.description ?? null,
+        confidence: "HIGH",
+        sourceCount: 1,
+        aliases: ref.alias && ref.alias !== name ? { create: [{ name: ref.alias, aliasType: "NAME_VARIANT" }] } : undefined,
+        externalIds: strongId ? { create: strongId } : undefined,
+      },
+    });
+    return { status: "matched", entityId: created.id, created: true };
+  } catch (e) {
+    // Concurrent ingestion (concurrency > 1) can race two creates of the same
+    // strong identity. Recover by resolving the winning row instead of failing
+    // the whole document.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && strongId) {
+      const existing = await db.externalIdentifier.findUnique({
+        where: { provider_identifier: { provider: strongId.provider, identifier: strongId.identifier } },
+        select: { entityId: true },
+      });
+      if (existing) return { status: "matched", entityId: existing.entityId, created: false };
+    }
+    throw e;
+  }
 }
