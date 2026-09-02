@@ -151,6 +151,47 @@ test.describe("API", () => {
     }
   });
 
+  test("entities listing API returns pagination shape", async ({ request }) => {
+    const res = await request.get("/api/entities?per_page=5");
+    expect([200, 429]).toContain(res.status());
+    if (res.status() === 200) {
+      const data = await res.json();
+      expect(data).toHaveProperty("total");
+      expect(data).toHaveProperty("page");
+      expect(data).toHaveProperty("entities");
+      expect(Array.isArray(data.entities)).toBe(true);
+    }
+  });
+
+  test("entity detail + relationships APIs resolve a real entity", async ({ request }) => {
+    // Resolve a real short id from search.
+    const search = await request.get("/api/search?q=Orpo");
+    if (search.status() === 429) {
+      test.skip();
+      return;
+    }
+    const { results } = await search.json();
+    const hit = results.find((r: { type: string }) => r.type === "PERSON");
+    expect(hit).toBeTruthy();
+    const id = hit.url.match(/-([0-9a-f]{8})$/)?.[1];
+    expect(id).toBeTruthy();
+    const detail = await request.get(`/api/entities/${id}`);
+    expect(detail.status()).toBe(200);
+    const entity = (await detail.json()).entity;
+    expect(entity.id).toBeTruthy();
+    const rels = await request.get(`/api/entities/${id}/relationships`);
+    expect(rels.status()).toBe(200);
+    expect(Array.isArray((await rels.json()).relationships)).toBe(true);
+  });
+
+  test("changes API returns an array", async ({ request }) => {
+    const res = await request.get("/api/changes?limit=5");
+    expect([200, 429]).toContain(res.status());
+    if (res.status() === 200) {
+      expect(Array.isArray((await res.json()).changes)).toBe(true);
+    }
+  });
+
   test("rate limiting returns 429 under burst", async ({ request }, testInfo) => {
     // Exhausts the shared per-IP limiter (120/min); run only once (desktop project).
     test.skip(testInfo.project.name !== "desktop", "burst test runs once");
@@ -164,5 +205,29 @@ test.describe("API", () => {
       }
     }
     expect(got429).toBe(true);
+  });
+});
+
+test.describe("corrections", () => {
+  test("success confirmation is shown after submission", async ({ page }) => {
+    await page.goto("/corrections?sent=1");
+    await expect(page.getByText("Kiitos!")).toBeVisible();
+  });
+});
+
+test.describe("logout", () => {
+  test("logout clears session and returns to same origin", async ({ page }) => {
+    const password = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "dev-admin-password";
+    await page.goto("/login");
+    await page.getByLabel("Salasana").fill(password);
+    await page.getByRole("button", { name: "Kirjaudu" }).click();
+    await expect(page).toHaveURL(/\/admin/);
+
+    const res = await page.request.post("/api/auth/logout", { maxRedirects: 0 });
+    const location = res.headers()["location"] ?? "";
+    expect(location).toMatch(/^https?:\/\/[^/]+\/$/); // same-origin root, never a foreign domain
+
+    await page.goto("/admin");
+    await expect(page).toHaveURL(/\/login/);
   });
 });

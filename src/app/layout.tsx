@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   },
   description:
     "Julkinen, lähdeperustainen selvitysverkosto suomalaisesta vallasta, rahavirroista, instituutioista ja päätöksenteosta.",
-  metadataBase: new URL("https://vaikutusverkosto.example"),
+  metadataBase: new URL(process.env.PUBLIC_BASE_URL ?? "https://vaikutusverkosto.example"),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

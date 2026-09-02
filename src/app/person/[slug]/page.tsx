@@ -33,7 +33,7 @@ export async function generateMetadata({
   return {
     title: entity.canonicalName,
     description: `Profiili: ${entity.canonicalName} — dokumentoidut tehtävät, verkostot, rahavirrat ja lähteet.`,
-    openGraph: { title: entity.canonicalName, type: "profile", url: `https://vaikutusverkosto.example/person/${slug}` },
+    openGraph: { title: entity.canonicalName, type: "profile", url: `${process.env.PUBLIC_BASE_URL ?? "https://vaikutusverkosto.example"}/person/${slug}` },
   };
 }
 

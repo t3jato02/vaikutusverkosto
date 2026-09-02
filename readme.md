@@ -61,6 +61,7 @@ ADMIN_API_TOKEN="change-me-in-production"
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest (unit + DB invariants) |
+| `npm run e2e` | Playwright release gate (needs `npm run build` + `npm start`) |
 | `npm run ingest:parliament` | Parliament Agent — MPs, parties, committees (real Eduskunta data) |
 | `npm run ingest:seed` | Clearly-marked demo flows (fictional entities) |
 | `npm run db:up` / `db:down` | Start / stop Docker DB |
