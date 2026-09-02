@@ -49,6 +49,7 @@ Copy `.env.example` to `.env` and adjust:
 
 ```env
 DATABASE_URL="postgresql://vaikutus:vaikutus@localhost:5434/vaikutusverkosto?schema=public"
+DIRECT_URL=""                                        # session-mode/direct URL for migrations
 API_RATE_LIMIT_PER_MINUTE=120
 AUTH_SECRET="<random, e.g. openssl rand -base64 32>"
 ADMIN_PASSWORD="<admin login password>"
