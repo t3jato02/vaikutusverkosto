@@ -50,8 +50,14 @@ Copy `.env.example` to `.env` and adjust:
 ```env
 DATABASE_URL="postgresql://vaikutus:vaikutus@localhost:5434/vaikutusverkosto?schema=public"
 API_RATE_LIMIT_PER_MINUTE=120
-ADMIN_API_TOKEN="change-me-in-production"
+AUTH_SECRET="<random, e.g. openssl rand -base64 32>"
+ADMIN_PASSWORD="<admin login password>"
+CRON_SECRET="<bearer token for /api/cron/ingest>"
+PUBLIC_BASE_URL="https://your-production-domain.fi"
 ```
+
+Production fails fast at startup if `DATABASE_URL`, `AUTH_SECRET`, `ADMIN_PASSWORD` or
+`CRON_SECRET` is missing (see `src/lib/env.ts`).
 
 ## Scripts
 
