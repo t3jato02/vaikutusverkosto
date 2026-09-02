@@ -4,7 +4,7 @@ export const metadata: Metadata = { title: "API" };
 
 const ENDPOINTS = [
   { method: "GET", path: "/api/search?q=&limit=", desc: "Haku: henkilöt, organisaatiot, rahavirrat." },
-  { method: "GET", path: "/api/entities?type=", desc: "Toimijoiden luettelo (tulossa)." },
+  { method: "GET", path: "/api/entities?type=&q=&page=&per_page=", desc: "Toimijoiden luettelo (sivutus, tyyppi- ja hakusuodatin)." },
   { method: "GET", path: "/api/entities/:id", desc: "Toimijan tiedot UUID:lla." },
   { method: "GET", path: "/api/entities/:id/relationships", desc: "Toimijan dokumentoidut suhteet." },
   { method: "GET", path: "/api/entities/:id/graph?depth=&flows=", desc: "Verkostograafi (solmut + viivat)." },

@@ -12,7 +12,12 @@ const CATEGORIES = [
   { value: "other", label: "Muu" },
 ];
 
-export default function CorrectionsPage() {
+export default async function CorrectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sent?: string }>;
+}) {
+  const { sent } = await searchParams;
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
@@ -22,6 +27,11 @@ export default function CorrectionsPage() {
           käsitellään avoimesti ja muutoshistoria säilyy.
         </p>
       </header>
+      {sent === "1" && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Kiitos! Korjauspyyntö on vastaanotettu ja jonossa käsiteltäväksi.
+        </p>
+      )}
       <form
         action="/api/corrections"
         method="post"

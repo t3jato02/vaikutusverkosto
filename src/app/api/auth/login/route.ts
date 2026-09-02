@@ -14,7 +14,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_form" }, { status: 400 });
   }
   const password = String(body.get("password") ?? "");
-  const next = String(body.get("next") ?? "/admin");
+  const rawNext = String(body.get("next") ?? "");
+  // Only same-origin, relative redirect targets are allowed after login
+  // (blocks open-redirect via absolute/protocol-relative URLs).
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/admin";
   const expected = process.env.ADMIN_PASSWORD;
   if (!expected) {
     return NextResponse.redirect(new URL("/login?error=invalid", req.url), 303);

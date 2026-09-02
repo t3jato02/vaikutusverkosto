@@ -55,6 +55,7 @@ function nodeStyle(type: string): { shape: string; color: string } {
 export default function GraphView({ entityId }: { entityId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const centerIdRef = useRef<string>(entityId);
   const [depth, setDepth] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export default function GraphView({ entityId }: { entityId: string }) {
   const renderGraph = useCallback(
     (centerId: string, nodes: GraphNodeData[], edges: GraphEdgeData[], d: number) => {
       if (!containerRef.current) return;
+      centerIdRef.current = centerId;
       const elements: ElementDefinition[] = nodes.map((n) => {
         const { shape, color } = nodeStyle(n.type);
         return {
@@ -170,7 +172,25 @@ export default function GraphView({ entityId }: { entityId: string }) {
           minZoom: 0.15,
           maxZoom: 4,
         });
-      cyRef.current = cy;
+      if (!cyRef.current) {
+        cyRef.current = cy;
+        cy.on("tap", "node", (evt) => {
+          const id = evt.target.id();
+          if (id !== centerIdRef.current) {
+            window.open(`/entity/${id}`, "_self");
+          }
+        });
+        cy.on("tap", "edge", (evt) => {
+          setSelectedEdge(evt.target.data() as GraphEdgeData);
+        });
+        cy.on("tap", (evt) => {
+          if (evt.target === cy) setSelectedEdge(null);
+        });
+        cy.on("dbltap", "node", (evt) => {
+          const id = evt.target.id();
+          if (id !== centerIdRef.current) setDepth((p) => p + 1);
+        });
+      }
 
       if (d > 1) {
         // Merge newly fetched nodes/edges into the existing graph.
@@ -180,24 +200,6 @@ export default function GraphView({ entityId }: { entityId: string }) {
         cy.add(elements);
       }
       cy.layout({ name: "cose", animate: false, nodeRepulsion: 7000, idealEdgeLength: 90 }).run();
-
-      cy.on("tap", "node", (evt) => {
-        const id = evt.target.id();
-        if (id !== centerId) {
-          window.open(`/entity/${id}`, "_self");
-        }
-      });
-      cy.on("tap", "edge", (evt) => {
-        const d = evt.target.data() as GraphEdgeData;
-        setSelectedEdge(d);
-      });
-      cy.on("tap", (evt) => {
-        if (evt.target === cy) setSelectedEdge(null);
-      });
-      cy.on("dbltap", "node", (evt) => {
-        const id = evt.target.id();
-        if (id !== centerId) setDepth((p) => p + 1);
-      });
     },
     [activeFilters, timeYear, showFlows],
   );
