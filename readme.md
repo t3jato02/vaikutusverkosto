@@ -95,7 +95,9 @@ all output is React-escaped, so there is no current injection sink.
 npm run release:gate                 # lint, typecheck, tests, build, migrations status,
                                      # critical env, + data invariants (evidence /
                                      # verification status / confidence range) → GO / NO-GO
-node scripts/release-gate.mjs --full # + Playwright e2e (needs build + start on :3000)
+node scripts/release-gate.mjs --full # + Playwright e2e — start the server under test with
+                                     # RATE_LIMIT_DISABLED=1 (avoids the shared per-IP window
+                                     # being poisoned across viewport projects; burst test self-skips)
 node scripts/release-gate.mjs --smoke https://vaikutusverkosto.vercel.app \
      --expect-sha $(git rev-parse HEAD)          # + production URL/API smoke + SHA match
 # SMOKE_EXPECT_UPSTASH=1 also asserts /api/version reports rateLimitBackend=upstash
