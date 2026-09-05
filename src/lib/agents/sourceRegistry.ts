@@ -71,18 +71,29 @@ export async function ensureRegistrySource(adapterId: string, client: PrismaClie
   });
 }
 
+export interface RegistryRunCounters {
+  docsChecked?: number;
+  docsChanged?: number;
+  durationMs?: number;
+}
+
 export async function recordRegistryCheck(
   adapterId: string,
-  result: { ok: boolean; error?: string | null },
+  result: { ok: boolean; error?: string | null } & RegistryRunCounters,
   client: PrismaClient = db,
 ) {
   const exists = await client.ingestionSource.findUnique({ where: { id: adapterId }, select: { id: true } });
   if (!exists) await ensureRegistrySource(adapterId, client);
   const now = new Date();
+  const counters = {
+    ...(result.docsChecked != null ? { lastRunDocsChecked: result.docsChecked } : {}),
+    ...(result.docsChanged != null ? { lastRunDocsChanged: result.docsChanged } : {}),
+    ...(result.durationMs != null ? { lastRunDurationMs: Math.round(result.durationMs) } : {}),
+  };
   if (result.ok) {
     await client.ingestionSource.update({
       where: { id: adapterId },
-      data: { lastCheckedAt: now, lastSuccessAt: now, consecutiveFailures: 0, lastError: null },
+      data: { lastCheckedAt: now, lastSuccessAt: now, consecutiveFailures: 0, lastError: null, ...counters },
     });
   } else {
     await client.ingestionSource.update({
@@ -92,9 +103,20 @@ export async function recordRegistryCheck(
         lastErrorAt: now,
         lastError: (result.error ?? "unknown error").slice(0, 2000),
         consecutiveFailures: { increment: 1 },
+        ...counters,
       },
     });
   }
+}
+
+/** Registry health state derived from failure streak + enabled flag. */
+export type SourceHealth = "HEALTHY" | "DEGRADED" | "FAILING" | "DISABLED";
+
+export function sourceHealth(row: { enabled: boolean; consecutiveFailures: number }): SourceHealth {
+  if (!row.enabled) return "DISABLED";
+  if (row.consecutiveFailures >= 3) return "FAILING";
+  if (row.consecutiveFailures > 0) return "DEGRADED";
+  return "HEALTHY";
 }
 
 /** Is this source allowed to run right now? */

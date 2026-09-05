@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "AgentRun" ADD COLUMN     "documentsChanged" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "documentsChecked" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "documentsNew" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "documentsUnchanged" INTEGER NOT NULL DEFAULT 0;

@@ -5,9 +5,11 @@ import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { MAX_RUN_MINUTES, type RunContext, type RunReport, type SourceAdapter } from "./types";
-import { mapWithConcurrency, TransientError, sleep } from "./http";
+import { TransientError, sleep } from "./http";
 import { ensureSource, markSourceFailure, markSourceSuccess, publishVerifiedFact } from "./publish";
 import { ensureRegistrySource, isSourceEnabled, recordRegistryCheck } from "./sourceRegistry";
+import { collect, markDocumentProcessed } from "@/lib/ingestion/collector";
+import type { DocumentDescriptor } from "@/lib/ingestion/types";
 
 export interface RunOptions {
   concurrency?: number;
@@ -120,6 +122,7 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
   });
 
   const stats = { scanned: 0, proposed: 0, created: 0, updated: 0, rejected: 0, errors: 0 };
+  const docStats = { checked: 0, new: 0, changed: 0, unchanged: 0 };
   const ctx: RunContext = {
     runId: run.id,
     agentId: adapter.id,
@@ -128,6 +131,7 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
     stats,
     log: (m) => console.log(`[${adapter.id}] ${m}`),
   };
+  const runStartedAt = Date.now();
 
   try {
     // Keep the lock fresh during an active tick.
@@ -144,10 +148,44 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
     const tick = pending.slice(0, budget);
     const budgetHit = pending.length > tick.length;
 
-    await mapWithConcurrency(tick, concurrency, async (doc) => {
+    // --- Collector framework: fetch → snapshot → change-detect (Phase 1-3). ---
+    const byExternalId = new Map(tick.map((d) => [d.id, d]));
+    const descriptors: DocumentDescriptor[] = tick.map((doc) => ({
+      externalId: doc.id,
+      url: doc.url,
+      title: doc.title ?? null,
+      publishedAt: doc.publishedAt ?? null,
+      metadata: doc.meta ? { meta: doc.meta } : undefined,
+      // The adapter still owns its own fetch/decode; the framework hashes the
+      // parsed payload for change detection and stores the snapshot.
+      fetch: async () => ({ json: await withRetries(() => adapter.fetch(ctx, doc)) }),
+    }));
+
+    const collected = await collect(adapter.id, descriptors, { concurrency });
+    docStats.checked += collected.checked;
+    docStats.new += collected.new;
+    docStats.changed += collected.changed;
+    docStats.unchanged += collected.unchanged;
+    ctx.log(
+      `collected ${collected.checked} (${collected.new} new, ${collected.changed} changed, ` +
+        `${collected.unchanged} unchanged, ${collected.errors} errors) in ${collected.durationMs}ms`,
+    );
+
+    for (const cd of collected.documents) {
+      const doc = byExternalId.get(cd.descriptor.externalId)!;
+      // Every checked descriptor advances the resume cursor (errors retry on the
+      // next full run, not within this tick — avoids an infinite stuck tick).
+      cursor.processed.push(doc.id);
+
+      if (cd.change === "error") {
+        stats.errors++;
+        ctx.log(`collector error on ${doc.id}: ${cd.error}`);
+        continue;
+      }
+      if (cd.change === "unchanged") continue; // Phase 3: skip the expensive chain.
+
       try {
-        const raw = await withRetries(() => adapter.fetch(ctx, doc));
-        const facts = await adapter.parse(ctx, doc, raw);
+        const facts = await adapter.parse(ctx, doc, cd.payload!.json);
         stats.proposed += facts.length;
         for (const fact of facts) {
           const proposed = {
@@ -179,12 +217,13 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
             await adapter.onFactPublished(ctx, fact, result.entityIds);
           }
         }
-        cursor.processed.push(doc.id);
+        await markDocumentProcessed(cd.documentId, { ok: true, parserVersion: adapter.id });
       } catch (e) {
         stats.errors++;
         ctx.log(`error on ${doc.id}: ${(e as Error).message}`);
+        await markDocumentProcessed(cd.documentId, { ok: false, error: (e as Error).message });
       }
-    });
+    }
 
     clearInterval(keepalive);
 
@@ -193,10 +232,24 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
       // cursor, keep the run open so the next invocation can continue it.
       await db.agentRun.update({
         where: { id: run.id },
-        data: { lockUntil: null, metadata: cursorJson(cursor), sourceId: source.id, recordsScanned: stats.scanned },
+        data: {
+          lockUntil: null,
+          metadata: cursorJson(cursor),
+          sourceId: source.id,
+          recordsScanned: stats.scanned,
+          documentsChecked: docStats.checked,
+          documentsNew: docStats.new,
+          documentsChanged: docStats.changed,
+          documentsUnchanged: docStats.unchanged,
+        },
       });
       // Progress was made this tick — the source is healthy.
-      await recordRegistryCheck(adapter.id, { ok: true });
+      await recordRegistryCheck(adapter.id, {
+        ok: true,
+        docsChecked: docStats.checked,
+        docsChanged: docStats.new + docStats.changed,
+        durationMs: Date.now() - runStartedAt,
+      });
       return {
         agent: adapter.id,
         status: "PARTIAL",
@@ -209,7 +262,12 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
     }
 
     await markSourceSuccess(db, source.id);
-    await recordRegistryCheck(adapter.id, { ok: true });
+    await recordRegistryCheck(adapter.id, {
+      ok: true,
+      docsChecked: docStats.checked,
+      docsChanged: docStats.new + docStats.changed,
+        durationMs: Date.now() - runStartedAt,
+    });
 
     const status: "SUCCESS" | "PARTIAL" = stats.errors > 0 ? "PARTIAL" : "SUCCESS";
     await db.agentRun.update({
@@ -224,6 +282,10 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
         factsRejected: stats.rejected,
         recordsCreated: stats.created,
         recordsUpdated: stats.updated,
+        documentsChecked: docStats.checked,
+        documentsNew: docStats.new,
+        documentsChanged: docStats.changed,
+        documentsUnchanged: docStats.unchanged,
         errors: stats.errors,
         lockUntil: null,
         metadata: cursorJson(cursor),

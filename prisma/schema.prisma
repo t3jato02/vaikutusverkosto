@@ -599,6 +599,11 @@ model AgentRun {
   factsRejected   Int      @default(0)
   recordsCreated  Int      @default(0)
   recordsUpdated  Int      @default(0)
+  // Collector-framework document counters (Phase 4).
+  documentsChecked   Int   @default(0)
+  documentsNew       Int   @default(0)
+  documentsChanged   Int   @default(0)
+  documentsUnchanged Int   @default(0)
   errors          Int      @default(0)
   cost            Decimal? @db.Decimal(10, 4)
   status          String   @default("RUNNING") // RUNNING | SUCCESS | PARTIAL | FAILED | SKIPPED
