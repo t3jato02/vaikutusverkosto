@@ -67,6 +67,13 @@ export const procurementAdapter: SourceAdapter = {
   schedule: "weekly",
   baseUrl: SITE_URL,
   publisher: "Valtiovarainministeriö / Tutki hankintoja",
+  reliabilityTier: "OFFICIAL_REGISTER",
+  format: "API",
+  updateCadence: "weekly",
+  termsUrl: "https://tutkihankintoja.fi/",
+  notes:
+    "Valtiovarainministeriön virallinen palvelu. Taustarajapinta käyttää julkisessa " +
+    "frontendissä upotettua anonyymiä lukuavainta. Salassa pidettävät rivit ei koskaan julkaista.",
 
   async discover(ctx) {
     const latest = await fetchLatestYear();

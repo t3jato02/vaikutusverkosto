@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { MAX_RUN_MINUTES, type RunContext, type RunReport, type SourceAdapter } from "./types";
 import { mapWithConcurrency, TransientError, sleep } from "./http";
 import { ensureSource, markSourceFailure, markSourceSuccess, publishVerifiedFact } from "./publish";
+import { ensureRegistrySource, isSourceEnabled, recordRegistryCheck } from "./sourceRegistry";
 
 export interface RunOptions {
   concurrency?: number;
@@ -30,6 +31,24 @@ function cursorJson(c: RunCursor): Prisma.InputJsonValue {
 export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): Promise<RunReport> {
   const concurrency = opts.concurrency ?? 4;
   const staleAfterMs = opts.staleAfterMs ?? MAX_RUN_MINUTES * 60 * 1000;
+
+  // Source Registry: seed the row, and honour an operator "disabled" flag.
+  await ensureRegistrySource(adapter.id);
+  if (!(await isSourceEnabled(adapter.id))) {
+    return {
+      agent: adapter.id,
+      status: "SKIPPED",
+      runId: "",
+      sourceId: null,
+      scanned: 0,
+      proposed: 0,
+      created: 0,
+      updated: 0,
+      rejected: 0,
+      errors: 0,
+      skippedLock: false,
+    };
+  }
 
   // ------------------------------------------------------------------
   // Lock + resume acquisition.
@@ -176,6 +195,8 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
         where: { id: run.id },
         data: { lockUntil: null, metadata: cursorJson(cursor), sourceId: source.id, recordsScanned: stats.scanned },
       });
+      // Progress was made this tick — the source is healthy.
+      await recordRegistryCheck(adapter.id, { ok: true });
       return {
         agent: adapter.id,
         status: "PARTIAL",
@@ -188,6 +209,7 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
     }
 
     await markSourceSuccess(db, source.id);
+    await recordRegistryCheck(adapter.id, { ok: true });
 
     const status: "SUCCESS" | "PARTIAL" = stats.errors > 0 ? "PARTIAL" : "SUCCESS";
     await db.agentRun.update({
@@ -223,6 +245,7 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
     };
   } catch (e) {
     await markSourceFailure(db, source.id, String(e));
+    await recordRegistryCheck(adapter.id, { ok: false, error: String(e) });
     await db.agentRun.update({
       where: { id: run.id },
       data: {

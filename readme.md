@@ -78,6 +78,22 @@ money, changes, graph), `corrections`, `auth`, `expensive` (agent runs).
   *Upstash Redis* → *Create*. Vercel injects both env vars automatically; redeploy.
   Until then production runs the in-memory fallback (logged as a warning at boot).
 
+## Source Registry (Sprint B)
+
+`IngestionSource` is the central registry of ingestion sources — one row per
+adapter (`src/lib/agents/*`), seeded/refreshed from code by
+`src/lib/agents/sourceRegistry.ts`. Distinct from `Source` (a per-document
+evidence record). It carries operational state: `enabled`, `reliabilityTier`,
+`format`, `updateCadence`, `termsUrl`, `notes`, `lastCheckedAt`,
+`lastSuccessAt`, `lastError`, `consecutiveFailures`.
+
+- `npm run registry:sync` — seed/refresh from adapters (idempotent; preserves
+  `enabled` + health).
+- The cron orchestrator syncs the registry before each run; `runAgent` records
+  success/failure health and honours a `disabled` source (returns `SKIPPED`).
+- Admin: **/admin/agents → LÄHDEREKISTERI** lists sources, health, and an
+  enable/disable toggle.
+
 ## Content-Security-Policy
 
 `script-src` in production is `'self' 'unsafe-inline'` — `'unsafe-eval'` is

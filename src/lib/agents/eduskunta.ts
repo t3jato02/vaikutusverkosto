@@ -97,6 +97,13 @@ export const eduskuntaAdapter: SourceAdapter = {
   schedule: "daily",
   baseUrl: `${BASE}/seating/`,
   publisher: "Eduskunta (avoindata.eduskunta.fi)",
+  reliabilityTier: "OFFICIAL_PRIMARY",
+  format: "API",
+  updateCadence: "daily",
+  termsUrl: "https://avoindata.eduskunta.fi/#/fi/licence",
+  notes:
+    "Eduskunnan virallinen avoin data (CC BY 4.0). Istumakartta + edustajien " +
+    "yksityiskohtaiset tiedot: puolue, valiokunnat, ministeriys, koulutukset.",
 
   async discover(ctx) {
     const seating = await fetchJsonLatin1Retry<SeatingRow[]>(`${BASE}/seating/`);

@@ -475,6 +475,46 @@ model Evidence {
   @@index([sourceId])
 }
 
+// ---------------------------------------------------------------- source registry (Sprint B)
+
+// How much intrinsic authority a source carries. Never a country/creed signal —
+// only document provenance strength.
+enum ReliabilityTier {
+  OFFICIAL_PRIMARY // law/registry/parliament: the authoritative record itself
+  OFFICIAL_REGISTER // official register extract / open-data API
+  PUBLIC_DISCLOSURE // mandated disclosure (declarations of interest, filings)
+  ANNUAL_REPORT // organisation's own published report
+  REPUTABLE_MEDIA
+  OTHER
+}
+
+// Central registry of ingestion sources. One row per ingestion source, seeded
+// from the code adapters (src/lib/agents/*). Distinct from `Source`, which is a
+// per-document evidence record. `id` matches the adapter id.
+model IngestionSource {
+  id                  String          @id
+  name                String
+  publisher           String
+  baseUrl             String
+  sourceType          SourceType
+  adapter             String // adapter id used to ingest (== id for now)
+  reliabilityTier     ReliabilityTier @default(OFFICIAL_PRIMARY)
+  format              String          @default("API") // API | HTML | PDF | RSS
+  updateCadence       String          @default("daily") // daily | weekly | monthly
+  enabled             Boolean         @default(true)
+  termsUrl            String?
+  notes               String?         @db.Text
+  lastCheckedAt       DateTime?
+  lastSuccessAt       DateTime?
+  lastErrorAt         DateTime?
+  lastError           String?         @db.Text
+  consecutiveFailures Int             @default(0)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([enabled])
+}
+
 // ---------------------------------------------------------------- agents & ops
 
 model AgentRun {

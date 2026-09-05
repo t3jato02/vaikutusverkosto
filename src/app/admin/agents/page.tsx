@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { listAdapters } from "@/lib/agents/registry";
+import { syncRegistry, listRegistry } from "@/lib/agents/sourceRegistry";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Agentit" };
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminAgentsPage() {
   const adapters = listAdapters();
+  await syncRegistry();
+  const registry = await listRegistry();
   const runs = await db.agentRun.findMany({
     orderBy: { startedAt: "desc" },
     take: 60,
@@ -76,6 +79,56 @@ export default async function AdminAgentsPage() {
               </li>
             );
           })}
+        </ul>
+      </section>
+
+      <section aria-label="Lähderekisteri">
+        <h2 className="card-title mb-2">LÄHDEREKISTERI</h2>
+        <p className="mb-2 text-xs text-ink-500">
+          Keskitetty rekisteri ingestion-lähteille. Kuvailevat kentät päivittyvät koodin
+          adaptereista; tila (käytössä / kunto) säilyy.
+        </p>
+        <ul className="card divide-y divide-ink-100">
+          {registry.map((s) => (
+            <li key={s.id} className="flex flex-wrap items-start justify-between gap-2 py-3 text-sm">
+              <div className="min-w-0">
+                <span className="font-semibold text-ink-900">{s.name}</span>
+                <span className="ml-2 rounded bg-ink-100 px-1.5 py-0.5 text-[10px] uppercase text-ink-500">{s.id}</span>
+                <p className="mt-0.5 text-[11px] text-ink-500">
+                  {s.publisher} · {s.reliabilityTier} · {s.format} · {s.updateCadence}
+                  {s.termsUrl ? (
+                    <>
+                      {" · "}
+                      <a href={s.termsUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">ehdot</a>
+                    </>
+                  ) : null}
+                </p>
+                <p className="mt-0.5 text-[11px] text-ink-400">
+                  tarkistettu {formatDate(s.lastCheckedAt)} · onnistui {formatDate(s.lastSuccessAt)}
+                  {s.consecutiveFailures > 0 ? ` · ${s.consecutiveFailures} peräkkäistä virhettä` : ""}
+                </p>
+                {s.lastError ? <p className="mt-0.5 truncate text-[11px] text-red-600">{s.lastError}</p> : null}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span
+                  className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
+                    !s.enabled
+                      ? "bg-ink-100 text-ink-500"
+                      : s.consecutiveFailures >= 3
+                        ? "bg-red-50 text-red-700"
+                        : s.consecutiveFailures > 0
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {s.enabled ? "KÄYTÖSSÄ" : "POIS"}
+                </span>
+                <form action={`/api/admin/sources/${s.id}/toggle`} method="post">
+                  <button type="submit" className="btn text-xs">{s.enabled ? "Poista käytöstä" : "Ota käyttöön"}</button>
+                </form>
+              </div>
+            </li>
+          ))}
         </ul>
       </section>
 
