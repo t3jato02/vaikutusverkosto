@@ -135,4 +135,6 @@ export interface RunReport {
   rejected: number;
   errors: number;
   skippedLock: boolean;
+  /** True when a budget-tick ended before the full batch was processed (resumable). */
+  continuing?: boolean;
 }

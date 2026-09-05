@@ -5,7 +5,13 @@ export function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-const REQUIRED_IN_PRODUCTION = ["DATABASE_URL", "AUTH_SECRET", "ADMIN_PASSWORD", "CRON_SECRET"];
+const REQUIRED_IN_PRODUCTION = [
+  "DATABASE_URL",
+  "AUTH_SECRET",
+  "ADMIN_PASSWORD",
+  "CRON_SECRET",
+  "PUBLIC_BASE_URL",
+];
 
 export function validateEnv(): { ok: boolean; missing: string[] } {
   if (!isProduction()) return { ok: true, missing: [] };

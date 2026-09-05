@@ -194,6 +194,7 @@ enum RelationshipType {
   PART_OF
   CANDIDATE_OF
   SITS_IN
+  EDUCATED_AT
 }
 
 enum VerificationState {

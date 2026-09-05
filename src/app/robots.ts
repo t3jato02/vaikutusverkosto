@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
+import { baseUrl } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
-  const base = process.env.PUBLIC_BASE_URL ?? "https://vaikutusverkosto.example";
+  const base = baseUrl();
   return {
     rules: [{ userAgent: "*", allow: "/", disallow: ["/admin", "/api/admin", "/api/cron", "/login"] }],
     sitemap: `${base}/sitemap.xml`,

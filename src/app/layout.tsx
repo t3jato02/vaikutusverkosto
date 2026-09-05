@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { baseUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: {
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   },
   description:
     "Julkinen, lähdeperustainen selvitysverkosto suomalaisesta vallasta, rahavirroista, instituutioista ja päätöksenteosta.",
-  metadataBase: new URL(process.env.PUBLIC_BASE_URL ?? "https://vaikutusverkosto.example"),
+  metadataBase: new URL(baseUrl()),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

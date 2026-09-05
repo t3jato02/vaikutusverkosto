@@ -35,6 +35,8 @@ export default async function AdminAgentsPage() {
         <ul className="card divide-y divide-ink-100">
           {adapters.map((a) => {
             const last = lastRuns.get(a.id);
+            const lastSuccess = runs.find((r) => r.agent === a.id && r.status === "SUCCESS");
+            const lastFailed = runs.find((r) => r.agent === a.id && (r.status === "FAILED" || r.status === "PARTIAL"));
             return (
               <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <div>
@@ -45,6 +47,16 @@ export default async function AdminAgentsPage() {
                   <p className="text-xs text-ink-500">
                     Aikataulu: {a.schedule === "daily" ? "päivittäin (04:00 UTC)" : "viikoittain (ma 04:00 UTC)"}
                   </p>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-ink-500">
+                    {lastSuccess ? (
+                      <span className="text-emerald-700">viime onnistui: {formatDate(lastSuccess.startedAt)}</span>
+                    ) : (
+                      <span className="text-ink-300">ei onnistuneita ajoja</span>
+                    )}
+                    {lastFailed ? (
+                      <span className="text-amber-700">viime virheet: {formatDate(lastFailed.startedAt)} ({lastFailed.errors} virhettä)</span>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="text-right text-xs text-ink-500">
                   {last ? (
@@ -90,18 +102,22 @@ export default async function AdminAgentsPage() {
       <section aria-label="Yksityiskohtaiset ajot">
         <h2 className="card-title mb-2">VIIMEISIMMÄT AJOT</h2>
         <ul className="card divide-y divide-ink-100">
-          {runs.map((r) => (
-            <li key={r.id} className="py-2.5 text-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-semibold text-ink-900">{r.agent}</span>
-                <span className={`font-semibold ${r.status === "SUCCESS" ? "text-emerald-600" : r.status === "PARTIAL" ? "text-amber-600" : r.status === "SKIPPED" ? "text-ink-400" : "text-red-600"}`}>{r.status}</span>
-              </div>
-              <div className="text-ink-500">
-                {formatDate(r.startedAt)} · skannattu {r.recordsScanned} · ehdotettu {r.factsProposed} · hyväksytty {r.factsAccepted} · hylätty {r.factsRejected} · uutta {r.recordsCreated} · päivitystä {r.recordsUpdated} · virheitä {r.errors}
-              </div>
-              {r.details && <div className="truncate text-ink-400">{r.details}</div>}
-            </li>
-          ))}
+          {runs.map((r) => {
+            const durMs = r.finishedAt ? r.finishedAt.getTime() - r.startedAt.getTime() : null;
+            const dur = durMs != null && durMs >= 0 ? `${Math.max(1, Math.round(durMs / 1000))} s` : "kesken";
+            return (
+              <li key={r.id} className="py-2.5 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-ink-900">{r.agent}</span>
+                  <span className={`font-semibold ${r.status === "SUCCESS" ? "text-emerald-600" : r.status === "PARTIAL" ? "text-amber-600" : r.status === "SKIPPED" ? "text-ink-400" : "text-red-600"}`}>{r.status}</span>
+                </div>
+                <div className="text-ink-500">
+                  {formatDate(r.startedAt)} · {dur} · skannattu {r.recordsScanned} · ehdotettu {r.factsProposed} · hyväksytty {r.factsAccepted} · hylätty {r.factsRejected} · uutta {r.recordsCreated} · päivitystä {r.recordsUpdated} · virheitä {r.errors}
+                </div>
+                {r.details && <div className="truncate text-ink-400">{r.details}</div>}
+              </li>
+            );
+          })}
         </ul>
       </section>
     </div>

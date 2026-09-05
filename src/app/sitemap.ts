@@ -1,10 +1,11 @@
 import type { MetadataRoute } from "next";
 import { db } from "@/lib/db";
+import { baseUrl } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = process.env.PUBLIC_BASE_URL ?? "https://vaikutusverkosto.example";
+  const base = baseUrl();
   const entities = await db.entity.findMany({
     where: { type: { in: ["PERSON", "ORGANIZATION", "COMPANY", "GOVERNMENT_BODY", "POLITICAL_PARTY", "PUBLIC_AUTHORITY", "MEDIA_ORGANIZATION", "EDUCATIONAL_INSTITUTION", "PENSION_INSTITUTION", "ASSOCIATION", "FOUNDATION", "UNION", "COURT"] } },
     select: { id: true, canonicalName: true, type: true, updatedAt: true },

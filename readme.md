@@ -57,8 +57,18 @@ CRON_SECRET="<bearer token for /api/cron/ingest>"
 PUBLIC_BASE_URL="https://your-production-domain.fi"
 ```
 
-Production fails fast at startup if `DATABASE_URL`, `AUTH_SECRET`, `ADMIN_PASSWORD` or
-`CRON_SECRET` is missing (see `src/lib/env.ts`).
+Production fails fast at startup if `DATABASE_URL`, `AUTH_SECRET`, `ADMIN_PASSWORD`,
+`CRON_SECRET` or `PUBLIC_BASE_URL` is missing (see `src/lib/env.ts`). All public
+canonical / OpenGraph / sitemap / robots URLs resolve through a single
+`PUBLIC_BASE_URL` source (`src/lib/site.ts`) — no placeholder domain in production.
+
+## Release gate
+
+```bash
+npm run release:gate                 # lint, typecheck, tests, build, migrations, env → GO / NO-GO
+node scripts/release-gate.mjs --full # + Playwright e2e (needs build + start on :3000)
+node scripts/release-gate.mjs --smoke https://vaikutusverkosto.vercel.app
+```
 
 ## Scripts
 
