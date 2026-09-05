@@ -62,13 +62,49 @@ Production fails fast at startup if `DATABASE_URL`, `AUTH_SECRET`, `ADMIN_PASSWO
 canonical / OpenGraph / sitemap / robots URLs resolve through a single
 `PUBLIC_BASE_URL` source (`src/lib/site.ts`) — no placeholder domain in production.
 
+## Rate limiting
+
+All routes call one abstraction — `rateLimit(req, purpose)` in
+`src/lib/rateLimit.ts` — with a purpose bucket: `public_read` (search, entities,
+money, changes, graph), `corrections`, `auth`, `expensive` (agent runs).
+
+- **Backend**: Upstash Redis sliding-window when `UPSTASH_REDIS_REST_URL` +
+  `UPSTASH_REDIS_REST_TOKEN` are set (shared across all serverless instances);
+  otherwise an in-memory per-instance fallback (dev/test, and controlled
+  degradation).
+- **Backend-failure policy**: `public_read` fails **open** (an outage must not
+  take the site down); `corrections` / `auth` / `expensive` fail **closed**.
+- **Provision for production (one step)**: Vercel dashboard → *Storage* →
+  *Upstash Redis* → *Create*. Vercel injects both env vars automatically; redeploy.
+  Until then production runs the in-memory fallback (logged as a warning at boot).
+
+## Content-Security-Policy
+
+`script-src` in production is `'self' 'unsafe-inline'` — `'unsafe-eval'` is
+dev-only (Fast Refresh/HMR) and is **not** sent in production.
+
+**Known follow-up (Sprint A.3):** drop `'unsafe-inline'` for scripts by moving
+to nonce-based CSP. That needs a `middleware.ts` that stamps a per-response
+nonce and threads it through the document — a rendering-architecture change, not
+a config tweak. Not gating further work: no user-supplied HTML is rendered and
+all output is React-escaped, so there is no current injection sink.
+
 ## Release gate
 
 ```bash
-npm run release:gate                 # lint, typecheck, tests, build, migrations, env → GO / NO-GO
-node scripts/release-gate.mjs --full # + Playwright e2e (needs build + start on :3000)
-node scripts/release-gate.mjs --smoke https://vaikutusverkosto.vercel.app
+npm run release:gate                 # lint, typecheck, tests, build, migrations status,
+                                     # critical env, + data invariants (evidence /
+                                     # verification status / confidence range) → GO / NO-GO
+node scripts/release-gate.mjs --full # + Playwright e2e — start the server under test with
+                                     # RATE_LIMIT_DISABLED=1 (avoids the shared per-IP window
+                                     # being poisoned across viewport projects; burst test self-skips)
+node scripts/release-gate.mjs --smoke https://vaikutusverkosto.vercel.app \
+     --expect-sha $(git rev-parse HEAD)          # + production URL/API smoke + SHA match
+# SMOKE_EXPECT_UPSTASH=1 also asserts /api/version reports rateLimitBackend=upstash
 ```
+
+`GET /api/version` reports `{ sha, builtAt, env, rateLimitBackend }` (no secrets).
+Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git rev-parse HEAD)`.
 
 ## Scripts
 

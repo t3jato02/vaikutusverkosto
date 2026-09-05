@@ -195,6 +195,7 @@ test.describe("API", () => {
   test("rate limiting returns 429 under burst", async ({ request }, testInfo) => {
     // Exhausts the shared per-IP limiter (120/min); run only once (desktop project).
     test.skip(testInfo.project.name !== "desktop", "burst test runs once");
+    test.skip(process.env.RATE_LIMIT_DISABLED === "1", "rate limiting disabled for this e2e run");
     let got429 = false;
     for (let i = 0; i < 200; i++) {
       const res = await request.get("/api/search?q=test");

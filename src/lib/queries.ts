@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import type { EntityType, RelationshipType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import { publicVisibleWhere } from "@/lib/verification";
 
 // ---------------------------------------------------------------- entity lookups
 
@@ -103,6 +104,7 @@ export async function searchMoney(q: string, limit = 5) {
         { recipientEntity: { canonicalName: { contains: term, mode: "insensitive" } } },
         { purpose: { contains: term, mode: "insensitive" } },
       ],
+      ...publicVisibleWhere,
     },
     take: limit,
     orderBy: { amount: "desc" },
@@ -122,7 +124,7 @@ export async function getPersonProfile(entityId: string) {
       include: { person: true, aliases: true, externalIds: true },
     }),
     db.relationship.findMany({
-      where: { OR: [{ sourceEntityId: entityId }, { targetEntityId: entityId }] },
+      where: { OR: [{ sourceEntityId: entityId }, { targetEntityId: entityId }], ...publicVisibleWhere },
       include: {
         sourceEntity: { select: { id: true, canonicalName: true, type: true } },
         targetEntity: { select: { id: true, canonicalName: true, type: true } },
@@ -132,7 +134,7 @@ export async function getPersonProfile(entityId: string) {
       take: 500,
     }),
     db.financialFlow.findMany({
-      where: { OR: [{ payerEntityId: entityId }, { recipientEntityId: entityId }] },
+      where: { OR: [{ payerEntityId: entityId }, { recipientEntityId: entityId }], ...publicVisibleWhere },
       include: {
         payerEntity: { select: { id: true, canonicalName: true, type: true } },
         recipientEntity: { select: { id: true, canonicalName: true, type: true } },
@@ -199,6 +201,7 @@ export async function getEntityGraph(entityId: string, opts: GraphQueryOptions =
         { sourceEntityId: { in: frontier } },
         { targetEntityId: { in: frontier } },
       ],
+      ...publicVisibleWhere,
       ...(opts.relationshipTypes && opts.relationshipTypes.length
         ? { relationshipType: { in: opts.relationshipTypes } }
         : {}),
@@ -228,6 +231,7 @@ export async function getEntityGraph(entityId: string, opts: GraphQueryOptions =
       const flowBatch = await db.financialFlow.findMany({
         where: {
           OR: [{ payerEntityId: { in: frontier } }, { recipientEntityId: { in: frontier } }],
+          ...publicVisibleWhere,
         },
         include: {
           payerEntity: { select: { id: true, canonicalName: true, type: true } },
@@ -275,12 +279,14 @@ export async function getTopConnected(limit = 12) {
 export async function getMoneyAggregates() {
   const byType = await db.financialFlow.groupBy({
     by: ["flowType"],
+    where: publicVisibleWhere,
     _sum: { amount: true },
     _count: { _all: true },
     orderBy: { _sum: { amount: "desc" } },
   });
   const byRecipient = await db.financialFlow.groupBy({
     by: ["recipientEntityId"],
+    where: publicVisibleWhere,
     _sum: { amount: true },
     _count: { _all: true },
     orderBy: { _sum: { amount: "desc" } },
@@ -348,9 +354,9 @@ export async function getStats() {
   const [persons, organizations, verifiedRelationships, sources, flows] = await Promise.all([
     db.entity.count({ where: { type: "PERSON" } }),
     db.entity.count({ where: { NOT: { type: "PERSON" } } }),
-    db.relationship.count({ where: { verificationState: "PUBLISHED" } }),
+    db.relationship.count({ where: publicVisibleWhere }),
     db.source.count(),
-    db.financialFlow.count(),
+    db.financialFlow.count({ where: publicVisibleWhere }),
   ]);
   return { persons, organizations, verifiedRelationships, sources, flows };
 }

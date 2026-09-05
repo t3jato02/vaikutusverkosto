@@ -27,3 +27,48 @@ export function baseUrl(): string {
 export function absoluteUrl(path: string): string {
   return `${baseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 }
+
+/** Hosts that count as "us" for a same-origin check. */
+function allowedHosts(req: Request): Set<string> {
+  const hosts = new Set<string>();
+  try {
+    hosts.add(new URL(baseUrl()).host);
+  } catch {
+    /* dev without PUBLIC_BASE_URL */
+  }
+  const fwdHost = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (fwdHost) hosts.add(fwdHost);
+  try {
+    hosts.add(new URL(req.url).host);
+  } catch {
+    /* ignore */
+  }
+  return hosts;
+}
+
+/**
+ * True when a state-changing request originates from our own site. Used for
+ * unauthenticated public form endpoints in place of a meaningless CSRF token:
+ * checks the Origin header, falling back to Referer. A browser form POST always
+ * carries at least one; a missing/foreign value is rejected.
+ */
+export function isSameOriginRequest(req: Request): boolean {
+  const hosts = allowedHosts(req);
+  const origin = req.headers.get("origin");
+  if (origin) {
+    try {
+      return hosts.has(new URL(origin).host);
+    } catch {
+      return false;
+    }
+  }
+  const referer = req.headers.get("referer");
+  if (referer) {
+    try {
+      return hosts.has(new URL(referer).host);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}

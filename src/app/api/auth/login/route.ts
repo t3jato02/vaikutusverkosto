@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { createSessionToken, safeEqual, setSessionCookie } from "@/lib/auth";
-import { clientIp, rateLimit } from "@/lib/rateLimit";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
-  const limit = rateLimit(`login:${clientIp(req)}`, 10);
-  if (!limit.allowed) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-  }
+  const rl = await rateLimit(req, "auth");
+  if (!rl.allowed) return tooManyRequests(rl);
   let body: FormData;
   try {
     body = await req.formData();

@@ -1,5 +1,5 @@
 import { CONFIDENCE_LABELS } from "@/lib/constants";
-import type { Confidence } from "@prisma/client";
+import type { Confidence, VerificationStatus } from "@prisma/client";
 
 const CONFIDENCE_STYLES: Record<Confidence, string> = {
   VERIFIED: "bg-emerald-50 text-emerald-800 border-emerald-200",
@@ -44,7 +44,7 @@ const FACT_STYLES: Record<FactKind, { label: string; cls: string; title: string 
     title: "Väite tai syytös, jonka lähde esittää — ei vahvistettu",
   },
   DISPUTED: {
-    label: "RII TAUTETTU",
+    label: "RIITAUTETTU",
     cls: "bg-orange-50 text-orange-800 border-orange-200",
     title: "Lähteet ovat ristiriidassa keskenään",
   },
@@ -52,6 +52,44 @@ const FACT_STYLES: Record<FactKind, { label: string; cls: string; title: string 
 
 export function FactBadge({ kind }: { kind: FactKind }) {
   const s = FACT_STYLES[kind];
+  return (
+    <span
+      title={s.title}
+      className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${s.cls}`}
+    >
+      {s.label}
+    </span>
+  );
+}
+
+// A7 verification status. SOURCE_CONFIRMED / HUMAN_VERIFIED render as a plain
+// FACT badge upstream; this badge exists to make DISPUTED and STALE unmissable.
+const STATUS_STYLES: Partial<Record<VerificationStatus, { label: string; cls: string; title: string }>> = {
+  HUMAN_VERIFIED: {
+    label: "IHMISEN VARMISTAMA",
+    cls: "bg-emerald-50 text-emerald-800 border-emerald-200",
+    title: "Tarkastaja on tarkistanut lähteen ja hyväksynyt yhteyden",
+  },
+  DISPUTED: {
+    label: "RIITAUTETTU",
+    cls: "bg-orange-50 text-orange-800 border-orange-200",
+    title: "Yhteydestä on uskottava ristiriita tai korjauspyyntö",
+  },
+  STALE: {
+    label: "VANHENTUNUT",
+    cls: "bg-amber-50 text-amber-800 border-amber-200",
+    title: "Tieto oli aiemmin pätevä; nykytila on todennäköisesti muuttunut",
+  },
+  AUTO_DETECTED: {
+    label: "EI VARMISTETTU",
+    cls: "bg-ink-100 text-ink-500 border-ink-300",
+    title: "Agentti havaitsi yhteyden; lähdettä ei ole vielä riittävästi varmistettu",
+  },
+};
+
+export function VerificationStatusBadge({ status }: { status: VerificationStatus }) {
+  const s = STATUS_STYLES[status];
+  if (!s) return null;
   return (
     <span
       title={s.title}

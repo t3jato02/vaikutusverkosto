@@ -37,6 +37,15 @@ export default async function CorrectionsPage({
         method="post"
         className="card space-y-4"
       >
+        {/* Honeypot — hidden from users, catches trivial bots. */}
+        <input
+          type="text"
+          name="website"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          className="hidden"
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="label mb-1 block">Profiilin URL (esim. /person/…)</span>

@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
-import { clientIp, rateLimit } from "@/lib/rateLimit";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const limit = rateLimit(clientIp(req), 120);
-  if (!limit.allowed) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) } });
-  }
+  const rl = await rateLimit(req, "public_read");
+  if (!rl.allowed) return tooManyRequests(rl);
   const { searchParams } = new URL(req.url);
   const type = searchParams.get("type");
   const q = searchParams.get("q");

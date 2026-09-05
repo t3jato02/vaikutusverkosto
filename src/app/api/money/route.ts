@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
+import { publicVisibleWhere } from "@/lib/verification";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const rl = await rateLimit(req, "public_read");
+  if (!rl.allowed) return tooManyRequests(rl);
   const byType = await db.financialFlow.groupBy({
     by: ["flowType"],
+    where: publicVisibleWhere,
     _sum: { amount: true },
     _count: { _all: true },
     orderBy: { _sum: { amount: "desc" } },
   });
   const byRecipient = await db.financialFlow.groupBy({
     by: ["recipientEntityId"],
+    where: publicVisibleWhere,
     _sum: { amount: true },
     _count: { _all: true },
     orderBy: { _sum: { amount: "desc" } },

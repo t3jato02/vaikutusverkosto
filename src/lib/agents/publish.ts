@@ -7,6 +7,7 @@
 import type { PrismaClient, SourceType, RelationshipType, FlowType, Confidence } from "@prisma/client";
 import type { RunContext, ProposedFact } from "./types";
 import { resolveEntity } from "./entityResolution";
+import { confidenceToScore, deriveAgentStatus } from "@/lib/verification";
 
 export interface PublicationResult {
   action: "created" | "updated" | "unchanged" | "rejected";
@@ -117,6 +118,7 @@ export async function publishVerifiedFact(
       startDate: fact.startDate ?? null,
       endDate: fact.endDate ?? null,
       confidence: fact.confidence,
+      sourceType: fact.sourceType,
       sourceId: evidenceSource.id,
       createdBy: ctx.agentId,
     });
@@ -136,6 +138,7 @@ export async function publishVerifiedFact(
     periodYear: fact.periodYear ?? null,
     purpose: fact.purpose ?? null,
     confidence: fact.confidence,
+    sourceType: fact.sourceType,
     sourceId: evidenceSource.id,
   });
   return { action: flow, entityIds: { source: src.entityId, target: tgt.entityId } };
@@ -155,6 +158,7 @@ async function upsertRelationship(
     startDate: Date | null;
     endDate: Date | null;
     confidence: Confidence;
+    sourceType: SourceType;
     sourceId: string;
     createdBy: string;
   },
@@ -192,6 +196,8 @@ async function upsertRelationship(
     ctx.stats.updated++;
     return "unchanged";
   }
+  // A7: an agent may only ever produce AUTO_DETECTED or SOURCE_CONFIRMED.
+  const verificationStatus = deriveAgentStatus({ sourceType: o.sourceType, confidence: o.confidence });
   const rel = await ctx.db.relationship.create({
     data: {
       sourceEntityId: o.sourceEntityId,
@@ -201,7 +207,9 @@ async function upsertRelationship(
       startDate: o.startDate,
       endDate: o.endDate,
       confidence: o.confidence,
+      confidenceScore: confidenceToScore(o.confidence),
       verificationState: "PUBLISHED",
+      verificationStatus,
       createdBy: o.createdBy,
       lastVerifiedAt: new Date(),
       evidence: { create: [{ sourceId: o.sourceId, confidence: o.confidence }] },
@@ -235,6 +243,7 @@ async function upsertFlow(
     periodYear: number | null;
     purpose: string | null;
     confidence: Confidence;
+    sourceType: SourceType;
     sourceId: string;
   },
 ): Promise<"created" | "updated" | "unchanged"> {
@@ -268,6 +277,7 @@ async function upsertFlow(
     ctx.stats.updated++;
     return "unchanged";
   }
+  const verificationStatus = deriveAgentStatus({ sourceType: o.sourceType, confidence: o.confidence });
   const flow = await ctx.db.financialFlow.create({
     data: {
       payerEntityId: o.payerEntityId,
@@ -281,7 +291,9 @@ async function upsertFlow(
       periodYear: o.periodYear,
       purpose: o.purpose,
       confidence: o.confidence,
+      confidenceScore: confidenceToScore(o.confidence),
       verificationState: "PUBLISHED",
+      verificationStatus,
       sourceCount: 1,
       evidence: { create: [{ sourceId: o.sourceId, confidence: o.confidence }] },
     },

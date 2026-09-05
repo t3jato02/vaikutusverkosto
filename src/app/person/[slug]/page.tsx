@@ -18,7 +18,7 @@ import {
   type RelationshipInput,
 } from "@/lib/metrics";
 import Avatar from "@/components/Avatar";
-import { ConfidenceBadge, FactBadge } from "@/components/badges";
+import { ConfidenceBadge, FactBadge, VerificationStatusBadge } from "@/components/badges";
 import GraphView from "@/components/GraphView";
 
 export const dynamic = "force-dynamic";
@@ -221,7 +221,8 @@ export default async function PersonPage({ params }: { params: Promise<{ slug: s
           {orgRels.slice(0, 40).map(({ other, direction, r }) => (
             <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
-                <FactBadge kind="FACT" />
+                <FactBadge kind={r.verificationStatus === "DISPUTED" ? "DISPUTED" : "FACT"} />
+                <VerificationStatusBadge status={r.verificationStatus} />
                 {direction === "out" ? (
                   <>
                     <Link href={entityUrlFor(other.id, other.type, other.canonicalName)} className="truncate text-sm font-medium text-ink-900 hover:text-accent">
