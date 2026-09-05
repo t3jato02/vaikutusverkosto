@@ -14,6 +14,9 @@ async function mkRel(status: "AUTO_DETECTED" | "DISPUTED" = "AUTO_DETECTED") {
       sourceEntityId: a.id,
       targetEntityId: b.id,
       relationshipType: "MEMBER_OF",
+      // PROPOSED (not PUBLISHED) so the fixture never trips the
+      // "published relationship has evidence" invariant if observed mid-run.
+      verificationState: "PROPOSED",
       verificationStatus: status,
       confidenceScore: 0.5,
       createdBy: "test-agent",

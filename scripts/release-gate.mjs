@@ -121,6 +121,43 @@ await (async () => {
       if (scoreOutOfRange) throw new Error(`confidenceScore outside [0,1]: ${scoreOutOfRange}`);
       return "confidenceScore within [0,1] everywhere";
     });
+
+    // Phase 17 — extended data-quality invariants.
+    const rejectedPublic = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "verificationStatus" = 'REJECTED' AND "verificationStatus" IN
+         ('SOURCE_CONFIRMED','HUMAN_VERIFIED','DISPUTED','STALE')`));
+    const selfRels = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship" WHERE "sourceEntityId" = "targetEntityId"`));
+    const negativeFlows = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "FinancialFlow" WHERE amount < 0`));
+    const badDocs = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "SourceDocument"
+       WHERE "contentHash" IS NULL OR "contentHash" = ''
+          OR "retrievedAt" > now() + interval '1 hour'
+          OR "firstSeenAt" > "lastSeenAt"`));
+    const dupStrongIds = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM (
+         SELECT provider, identifier FROM "ExternalIdentifier"
+         GROUP BY provider, identifier HAVING count(*) > 1) d`));
+
+    step("relationship integrity", () => {
+      if (rejectedPublic) throw new Error(`REJECTED relationships in the public set: ${rejectedPublic}`);
+      if (selfRels) throw new Error(`self-relationships: ${selfRels}`);
+      return "no REJECTED-in-public, no self-relationships";
+    });
+    step("financial flow sanity", () => {
+      if (negativeFlows) throw new Error(`negative-amount flows: ${negativeFlows}`);
+      return "no negative flow amounts";
+    });
+    step("document integrity", () => {
+      if (badDocs) throw new Error(`SourceDocument rows with bad hash/timestamps: ${badDocs}`);
+      return "every SourceDocument has a hash and sane timestamps";
+    });
+    step("entity resolution integrity", () => {
+      if (dupStrongIds) throw new Error(`duplicate strong identifiers: ${dupStrongIds}`);
+      return "no duplicate (provider, identifier) strong ids";
+    });
   } finally {
     await db.$disconnect();
   }

@@ -2,21 +2,46 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { listAdapters } from "@/lib/agents/registry";
-import { syncRegistry, listRegistry } from "@/lib/agents/sourceRegistry";
+import { syncRegistry, listRegistry, sourceHealth } from "@/lib/agents/sourceRegistry";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Agentit" };
 export const dynamic = "force-dynamic";
 
+const HEALTH_STYLE: Record<string, string> = {
+  HEALTHY: "bg-emerald-50 text-emerald-700",
+  DEGRADED: "bg-amber-50 text-amber-700",
+  FAILING: "bg-red-50 text-red-700",
+  DISABLED: "bg-ink-100 text-ink-500",
+};
+
 export default async function AdminAgentsPage() {
   const adapters = listAdapters();
   await syncRegistry();
   const registry = await listRegistry();
+  const since24h = new Date(Date.now() - 24 * 3600_000);
+  const since7d = new Date(Date.now() - 7 * 24 * 3600_000);
   const runs = await db.agentRun.findMany({
     orderBy: { startedAt: "desc" },
     take: 60,
     include: { source: { select: { sourceName: true, sourceUrl: true, status: true, consecutiveFailures: true, lastSuccessAt: true } } },
   });
+  const [agg24, agg7, newEntities24, changeLog24, publishedRels, failingSources] = await Promise.all([
+    db.agentRun.aggregate({
+      where: { startedAt: { gte: since24h } },
+      _sum: { documentsChecked: true, documentsChanged: true, documentsNew: true, factsProposed: true, recordsCreated: true, errors: true },
+      _count: { _all: true },
+    }),
+    db.agentRun.aggregate({
+      where: { startedAt: { gte: since7d } },
+      _sum: { documentsChecked: true, documentsChanged: true, recordsCreated: true, errors: true },
+      _count: { _all: true },
+    }),
+    db.entity.count({ where: { createdAt: { gte: since24h } } }),
+    db.changeLog.count({ where: { occurredAt: { gte: since24h } } }),
+    db.relationship.count({ where: { verificationStatus: { in: ["SOURCE_CONFIRMED", "HUMAN_VERIFIED"] } } }),
+    db.ingestionSource.count({ where: { enabled: true, consecutiveFailures: { gte: 3 } } }),
+  ]);
   const byAgent = await db.agentRun.groupBy({
     by: ["agent"],
     _sum: { recordsScanned: true, recordsCreated: true, recordsUpdated: true, errors: true },
@@ -32,6 +57,31 @@ export default async function AdminAgentsPage() {
         <h1 className="text-xl font-bold">Agenttien ajot</h1>
         <Link href="/admin" className="btn text-xs">Takaisin</Link>
       </div>
+
+      <section aria-label="Havainnointi">
+        <h2 className="card-title mb-2">HAVAINNOINTI</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {[
+            { label: "Ajoja 24 h", value: agg24._count._all },
+            { label: "Dokumentteja tark. 24 h", value: agg24._sum.documentsChecked ?? 0 },
+            { label: "Muuttuneita 24 h", value: agg24._sum.documentsChanged ?? 0 },
+            { label: "Uusia toimijoita 24 h", value: newEntities24 },
+            { label: "Muutostapahtumia 24 h", value: changeLog24 },
+            { label: "Julkaistuja suhteita", value: publishedRels },
+            { label: "Vikaantuneita lähteitä", value: failingSources },
+          ].map((s) => (
+            <div key={s.label} className="card">
+              <div className="text-lg font-bold tabular-nums">{s.value}</div>
+              <div className="text-[11px] text-ink-500">{s.label}</div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-ink-400">
+          7 vrk: {agg7._count._all} ajoa · {agg7._sum.documentsChecked ?? 0} dokumenttia tarkistettu ·{" "}
+          {agg7._sum.documentsChanged ?? 0} muuttunut · {agg7._sum.recordsCreated ?? 0} uutta tietuetta ·{" "}
+          {agg7._sum.errors ?? 0} virhettä
+        </p>
+      </section>
 
       <section aria-label="Agentit">
         <h2 className="card-title mb-2">AGENTIT</h2>
@@ -106,22 +156,14 @@ export default async function AdminAgentsPage() {
                 <p className="mt-0.5 text-[11px] text-ink-400">
                   tarkistettu {formatDate(s.lastCheckedAt)} · onnistui {formatDate(s.lastSuccessAt)}
                   {s.consecutiveFailures > 0 ? ` · ${s.consecutiveFailures} peräkkäistä virhettä` : ""}
+                  {" · "}viime ajo: {s.lastRunDocsChecked} tark. / {s.lastRunDocsChanged} muutt.
+                  {s.lastRunDurationMs != null ? ` / ${Math.round(s.lastRunDurationMs / 1000)} s` : ""}
                 </p>
                 {s.lastError ? <p className="mt-0.5 truncate text-[11px] text-red-600">{s.lastError}</p> : null}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <span
-                  className={`rounded px-2 py-0.5 text-[11px] font-semibold ${
-                    !s.enabled
-                      ? "bg-ink-100 text-ink-500"
-                      : s.consecutiveFailures >= 3
-                        ? "bg-red-50 text-red-700"
-                        : s.consecutiveFailures > 0
-                          ? "bg-amber-50 text-amber-700"
-                          : "bg-emerald-50 text-emerald-700"
-                  }`}
-                >
-                  {s.enabled ? "KÄYTÖSSÄ" : "POIS"}
+                <span className={`rounded px-2 py-0.5 text-[11px] font-semibold ${HEALTH_STYLE[sourceHealth(s)]}`}>
+                  {sourceHealth(s)}
                 </span>
                 <form action={`/api/admin/sources/${s.id}/toggle`} method="post">
                   <button type="submit" className="btn text-xs">{s.enabled ? "Poista käytöstä" : "Ota käyttöön"}</button>
