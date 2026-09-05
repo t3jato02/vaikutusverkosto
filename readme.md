@@ -62,6 +62,22 @@ Production fails fast at startup if `DATABASE_URL`, `AUTH_SECRET`, `ADMIN_PASSWO
 canonical / OpenGraph / sitemap / robots URLs resolve through a single
 `PUBLIC_BASE_URL` source (`src/lib/site.ts`) — no placeholder domain in production.
 
+## Rate limiting
+
+All routes call one abstraction — `rateLimit(req, purpose)` in
+`src/lib/rateLimit.ts` — with a purpose bucket: `public_read` (search, entities,
+money, changes, graph), `corrections`, `auth`, `expensive` (agent runs).
+
+- **Backend**: Upstash Redis sliding-window when `UPSTASH_REDIS_REST_URL` +
+  `UPSTASH_REDIS_REST_TOKEN` are set (shared across all serverless instances);
+  otherwise an in-memory per-instance fallback (dev/test, and controlled
+  degradation).
+- **Backend-failure policy**: `public_read` fails **open** (an outage must not
+  take the site down); `corrections` / `auth` / `expensive` fail **closed**.
+- **Provision for production (one step)**: Vercel dashboard → *Storage* →
+  *Upstash Redis* → *Create*. Vercel injects both env vars automatically; redeploy.
+  Until then production runs the in-memory fallback (logged as a warning at boot).
+
 ## Release gate
 
 ```bash

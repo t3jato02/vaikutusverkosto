@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { getRecentChanges, getMoneyAggregates } from "@/lib/queries";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  const rl = await rateLimit(req, "public_read");
+  if (!rl.allowed) return tooManyRequests(rl);
   const { searchParams } = new URL(req.url);
   const kind = searchParams.get("kind") ?? "changes";
   if (kind === "money") {

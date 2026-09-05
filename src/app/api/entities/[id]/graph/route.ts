@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { getEntityGraph, resolveShortId } from "@/lib/queries";
 import { relationshipLabel, flowLabel } from "@/lib/constants";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 import type { RelationshipType, FlowType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const rl = await rateLimit(req, "public_read");
+  if (!rl.allowed) return tooManyRequests(rl);
   const { id } = await params;
   const entityId = /^[0-9a-f]{8}$/.test(id) ? await resolveShortId(id) : id;
   if (!entityId) return NextResponse.json({ error: "not_found" }, { status: 404 });

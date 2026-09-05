@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { resolveShortId } from "@/lib/queries";
-import { clientIp, rateLimit } from "@/lib/rateLimit";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
-  const limit = rateLimit(clientIp(req), 10);
-  if (!limit.allowed) {
-    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
-  }
+  const rl = await rateLimit(req, "corrections");
+  if (!rl.allowed) return tooManyRequests(rl);
   let body: Record<string, unknown>;
   try {
     body = Object.fromEntries((await req.formData()).entries());

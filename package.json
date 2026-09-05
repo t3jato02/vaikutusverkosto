@@ -27,6 +27,8 @@
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.4",
     "cytoscape": "^3.31.0",
     "jose": "^6.2.10",
     "next": "^15.1.6",

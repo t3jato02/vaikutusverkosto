@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
 import { searchEntities, searchMoney } from "@/lib/queries";
-import { clientIp, rateLimit } from "@/lib/rateLimit";
+import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const limit = rateLimit(clientIp(req), Number(process.env.API_RATE_LIMIT_PER_MINUTE ?? 120));
-  if (!limit.allowed) {
-    return NextResponse.json(
-      { error: "rate_limited", retryAfterMs: limit.retryAfterMs },
-      { status: 429, headers: { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) } },
-    );
-  }
+  const rl = await rateLimit(req, "public_read");
+  if (!rl.allowed) return tooManyRequests(rl);
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? "";
   const n = Math.min(Number(searchParams.get("limit") ?? 8), 25);
