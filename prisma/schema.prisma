@@ -584,6 +584,23 @@ model EntityResolutionCandidate {
   @@index([refType, refName])
 }
 
+// Immutable audit trail for every human review action (Phase 12). Actor is the
+// role ("admin"), never PII.
+model ReviewAction {
+  id         String   @id @default(uuid()) @db.Uuid
+  actor      String   @default("admin")
+  targetType String // relationship | resolution_candidate | correction
+  targetId   String
+  action     String // approve | reject | dispute | stale | resolve | dismiss | edit | investigate
+  beforeData Json?
+  afterData  Json?
+  note       String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
 // ---------------------------------------------------------------- agents & ops
 
 model AgentRun {
