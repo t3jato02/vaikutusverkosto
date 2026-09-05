@@ -129,6 +129,27 @@ test.describe("admin access protection", () => {
     await expect(page).toHaveURL(/\/admin/);
     await expect(page.getByRole("heading", { name: /Hallinta/ })).toBeVisible();
   });
+
+  test("admin ingestion + review pages render", async ({ page }) => {
+    const password = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "dev-admin-password";
+    await page.goto("/login");
+    await page.getByLabel("Salasana").fill(password);
+    await page.getByRole("button", { name: "Kirjaudu" }).click();
+    await expect(page).toHaveURL(/\/admin/);
+
+    const errors: string[] = [];
+    page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+
+    await page.goto("/admin/agents");
+    await expect(page.getByRole("heading", { name: "LÄHDEREKISTERI" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "HAVAINNOINTI" })).toBeVisible();
+
+    await page.goto("/admin/review");
+    await expect(page.getByRole("heading", { name: "Tarkistusjono" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /RATKAISEMATTOMAT IDENTITEETIT/ })).toBeVisible();
+
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe("API", () => {
