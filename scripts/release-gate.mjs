@@ -47,9 +47,12 @@ step("lint", () => { sh("npx eslint ."); return "no eslint errors"; });
 // 2. Typecheck
 step("typecheck", () => { sh("npx tsc --noEmit"); return "tsc --noEmit clean"; });
 
-// 3. Unit + integration tests (Vitest; includes live DB invariant checks)
+// 3. Unit + integration tests (Vitest; includes live DB invariant checks).
+//    Force the real limiter on even if the caller disabled it for an e2e server.
 step("unit+integration tests", () => {
-  const out = sh("npx vitest run --reporter=dot");
+  const env = { ...process.env };
+  delete env.RATE_LIMIT_DISABLED;
+  const out = sh("npx vitest run --reporter=dot", { env });
   const m = out.match(/Tests\s+(\d+)\s+passed/);
   return m ? `${m[1]} passed` : "passed";
 });
@@ -123,9 +126,18 @@ await (async () => {
   }
 })();
 
-// 9. Optional: Playwright e2e release gate
+// 9. Optional: Playwright e2e release gate.
+//    Start the server under test with RATE_LIMIT_DISABLED=1 so the shared
+//    per-IP limiter is not poisoned across viewport projects; the burst test
+//    self-skips in that mode.
 if (FULL) {
-  step("e2e (Playwright)", () => { sh("npx playwright test", { stdio: ["ignore", "inherit", "inherit"] }); return "e2e passed"; });
+  step("e2e (Playwright)", () => {
+    sh("npx playwright test", {
+      stdio: ["ignore", "inherit", "inherit"],
+      env: { ...process.env, RATE_LIMIT_DISABLED: "1" },
+    });
+    return "e2e passed";
+  });
 }
 
 // 10. Optional: production URL + API smoke

@@ -126,10 +126,16 @@ export function __resetMemoryBuckets() {
 
 // ---------------------------------------------------------------- public API
 
+// Opt-out for end-to-end runs only: the e2e suite issues bursts from a single
+// IP and would otherwise poison the shared window for unrelated tests. Never
+// honoured unless explicitly set; unit tests cover the limiter directly.
+const DISABLED = process.env.RATE_LIMIT_DISABLED === "1";
+
 export async function rateLimit(req: Request, purpose: RateLimitPurpose): Promise<RateLimitResult> {
   const cfg = PURPOSES[purpose];
   const id = `${purpose}:${clientIp(req)}`;
 
+  if (DISABLED) return { allowed: true, retryAfterMs: 0, backend: "memory" };
   if (!useUpstash) return memoryLimit(id, cfg);
 
   try {
