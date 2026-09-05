@@ -95,12 +95,18 @@ describe("entity resolution identity collisions (P9)", () => {
     const bId = b.status === "matched" ? b.entityId : "";
     expect(aId !== bId).toBe(true);
 
-    // Name-only resolution with both present must be AMBIGUOUS (not a silent merge).
+    // Name-only resolution with multiple candidates must be UNRESOLVED (parked
+    // for review), never a silent merge.
     const nameOnly = await resolveEntity(db, { type: EntityType.PERSON, name: "Testi Henkilö", jurisdiction: "FI" });
-    expect(nameOnly.status).toBe("ambiguous");
+    expect(nameOnly.status).toBe("unresolved");
+    if (nameOnly.status === "unresolved") {
+      expect(nameOnly.candidates.length).toBeGreaterThan(1);
+      await db.entityResolutionCandidate.deleteMany({ where: { id: nameOnly.candidateId } });
+    }
 
     // Cleanup test data
     await db.externalIdentifier.deleteMany({ where: { provider: "test-idp" } });
+    await db.entityResolutionCandidate.deleteMany({ where: { refName: "Testi Henkilö" } });
     await db.entity.deleteMany({ where: { id: { in: [aId, bId] } } });
   });
 

@@ -509,10 +509,96 @@ model IngestionSource {
   lastErrorAt         DateTime?
   lastError           String?         @db.Text
   consecutiveFailures Int             @default(0)
+  // Rolling counters from the most recent completed run (Phase 15/16).
+  lastRunDocsChecked   Int            @default(0)
+  lastRunDocsChanged   Int            @default(0)
+  lastRunDurationMs    Int?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
+  documents           SourceDocument[]
+
   @@index([enabled])
+}
+
+// Lifecycle of one unit of ingested source material (Phase 2). One row per
+// (source, externalId); revisions are tracked by contentHash + lastChangedAt.
+enum DocumentProcessingStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  SKIPPED_UNCHANGED
+}
+
+model SourceDocument {
+  id                String                   @id @default(uuid()) @db.Uuid
+  ingestionSourceId String
+  ingestionSource   IngestionSource          @relation(fields: [ingestionSourceId], references: [id], onDelete: Cascade)
+  externalId        String // stable per-source document id
+  canonicalUrl      String
+  documentType      String                   @default("json") // json | html | pdf | text
+  title             String?
+  publishedAt       DateTime?
+  retrievedAt       DateTime                 @default(now())
+  contentHash       String
+  mimeType          String?
+  rawJson           Json?
+  rawText           String?                  @db.Text
+  storageRef        String? // object-storage key when the payload is too large for a column
+  parserVersion     String?
+  processingStatus  DocumentProcessingStatus @default(PENDING)
+  processingError   String?                  @db.Text
+  firstSeenAt       DateTime                 @default(now())
+  lastSeenAt        DateTime                 @default(now())
+  lastChangedAt     DateTime                 @default(now())
+  revision          Int                      @default(1)
+  metadata          Json?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@unique([ingestionSourceId, externalId])
+  @@index([ingestionSourceId, processingStatus])
+  @@index([contentHash])
+}
+
+// Entity resolution that could not be decided deterministically or with a
+// single confident name match — parked for human review instead of guessing
+// (Phase 5). The fact that produced it is NOT published until resolved.
+model EntityResolutionCandidate {
+  id                    String     @id @default(uuid()) @db.Uuid
+  ingestionSourceId     String?
+  refName               String
+  refType               EntityType
+  refJurisdiction       String?
+  refExternalProvider   String?
+  refExternalIdentifier String?
+  candidateEntityIds    String[]   @default([]) // possible matches, for the reviewer
+  context               Json? // the EntityRef + surrounding fact context
+  status                String     @default("PENDING") // PENDING | RESOLVED | DISMISSED
+  resolvedEntityId      String?    @db.Uuid
+  resolvedBy            String?
+  createdAt             DateTime   @default(now())
+  resolvedAt            DateTime?
+
+  @@index([status])
+  @@index([refType, refName])
+}
+
+// Immutable audit trail for every human review action (Phase 12). Actor is the
+// role ("admin"), never PII.
+model ReviewAction {
+  id         String   @id @default(uuid()) @db.Uuid
+  actor      String   @default("admin")
+  targetType String // relationship | resolution_candidate | correction
+  targetId   String
+  action     String // approve | reject | dispute | stale | resolve | dismiss | edit | investigate
+  beforeData Json?
+  afterData  Json?
+  note       String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }
 
 // ---------------------------------------------------------------- agents & ops
@@ -530,6 +616,11 @@ model AgentRun {
   factsRejected   Int      @default(0)
   recordsCreated  Int      @default(0)
   recordsUpdated  Int      @default(0)
+  // Collector-framework document counters (Phase 4).
+  documentsChecked   Int   @default(0)
+  documentsNew       Int   @default(0)
+  documentsChanged   Int   @default(0)
+  documentsUnchanged Int   @default(0)
   errors          Int      @default(0)
   cost            Decimal? @db.Decimal(10, 4)
   status          String   @default("RUNNING") // RUNNING | SUCCESS | PARTIAL | FAILED | SKIPPED
