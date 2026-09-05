@@ -3,15 +3,26 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {
+    // CORS is scoped to the public READ API only. Cross-origin use of the open
+    // data endpoints is intentional (see /api docs). Write/auth/admin/cron
+    // endpoints get NO CORS headers — same-origin only — and /api/corrections
+    // additionally enforces an Origin/Referer check in the route handler.
+    const publicReadApi = [
+      "/api/search",
+      "/api/entities",
+      "/api/entities/:path*",
+      "/api/money",
+      "/api/changes",
+    ];
     return [
-      {
-        source: "/api/:path*",
+      ...publicReadApi.map((source) => ({
+        source,
         headers: [
           { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
+          { key: "Access-Control-Allow-Methods", value: "GET, OPTIONS" },
           { key: "Access-Control-Allow-Headers", value: "Content-Type" },
         ],
-      },
+      })),
       {
         source: "/:path*",
         headers: [
