@@ -1,4 +1,30 @@
 /** @type {import('next').NextConfig} */
+const isDev = process.env.NODE_ENV !== "production";
+
+// Content-Security-Policy.
+//   script-src:
+//     'unsafe-eval' — required only in development (React Fast Refresh /
+//     webpack HMR). NOT emitted in production: the app bundle (Next 15,
+//     React 19, Cytoscape) runs without eval.
+//     'unsafe-inline' — still required in production: the Next.js App Router
+//     emits inline bootstrap scripts (self.__next_f...) with no nonce/hash.
+//     Removing it needs nonce-based CSP via middleware on every response —
+//     a rendering-architecture change tracked as a Sprint A.3 follow-up
+//     (see readme "Known follow-ups"). No concrete injection sink exists
+//     today (no user HTML is rendered; output is escaped by React).
+const scriptSrc = ["'self'", "'unsafe-inline'", ...(isDev ? ["'unsafe-eval'"] : [])].join(" ");
+const CSP = [
+  "default-src 'self'",
+  `script-src ${scriptSrc}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://avoindata.eduskunta.fi",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -34,19 +60,7 @@ const nextConfig = {
           },
           // HSTS is set by the hosting platform (Vercel) with preload; kept here as defense.
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
-          {
-            key: "Content-Security-Policy",
-            value:
-              "default-src 'self'; " +
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
-              "style-src 'self' 'unsafe-inline'; " +
-              "img-src 'self' data: blob: https://avoindata.eduskunta.fi; " +
-              "font-src 'self' data:; " +
-              "connect-src 'self'; " +
-              "frame-ancestors 'none'; " +
-              "base-uri 'self'; " +
-              "form-action 'self'",
-          },
+          { key: "Content-Security-Policy", value: CSP },
         ],
       },
     ];

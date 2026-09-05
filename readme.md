@@ -78,6 +78,17 @@ money, changes, graph), `corrections`, `auth`, `expensive` (agent runs).
   *Upstash Redis* → *Create*. Vercel injects both env vars automatically; redeploy.
   Until then production runs the in-memory fallback (logged as a warning at boot).
 
+## Content-Security-Policy
+
+`script-src` in production is `'self' 'unsafe-inline'` — `'unsafe-eval'` is
+dev-only (Fast Refresh/HMR) and is **not** sent in production.
+
+**Known follow-up (Sprint A.3):** drop `'unsafe-inline'` for scripts by moving
+to nonce-based CSP. That needs a `middleware.ts` that stamps a per-response
+nonce and threads it through the document — a rendering-architecture change, not
+a config tweak. Not gating further work: no user-supplied HTML is rendered and
+all output is React-escaped, so there is no current injection sink.
+
 ## Release gate
 
 ```bash
