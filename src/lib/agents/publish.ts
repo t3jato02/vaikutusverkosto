@@ -83,22 +83,29 @@ export async function publishVerifiedFact(
 
   // Resolve entities (never merge on name alone).
   const src = await resolveEntity(db, fact.source);
-  if (src.status === "ambiguous") {
+  if (src.status === "unresolved") {
     ctx.stats.rejected++;
-    return { action: "rejected", reason: "ambiguous source entity", entityIds: { source: null, target: null } };
+    return { action: "rejected", reason: `unresolved source entity (candidate ${src.candidateId})`, entityIds: { source: null, target: null } };
   }
   if (src.status === "rejected") {
     ctx.stats.rejected++;
     return { action: "rejected", reason: src.reason, entityIds: { source: null, target: null } };
   }
   const tgt = await resolveEntity(db, fact.target);
-  if (tgt.status === "ambiguous") {
+  if (tgt.status === "unresolved") {
     ctx.stats.rejected++;
-    return { action: "rejected", reason: "ambiguous target entity", entityIds: { source: src.entityId, target: null } };
+    return { action: "rejected", reason: `unresolved target entity (candidate ${tgt.candidateId})`, entityIds: { source: src.entityId, target: null } };
   }
   if (tgt.status === "rejected") {
     ctx.stats.rejected++;
     return { action: "rejected", reason: tgt.reason, entityIds: { source: src.entityId, target: null } };
+  }
+
+  // Guard: a relationship/flow must connect two distinct entities unless the
+  // type explicitly permits self-reference (none do today).
+  if (src.entityId === tgt.entityId) {
+    ctx.stats.rejected++;
+    return { action: "rejected", reason: "self-relationship not allowed", entityIds: { source: src.entityId, target: src.entityId } };
   }
 
   const evidenceSource = await ensureSource(db, {

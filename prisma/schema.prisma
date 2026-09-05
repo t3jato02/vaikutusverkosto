@@ -561,6 +561,29 @@ model SourceDocument {
   @@index([contentHash])
 }
 
+// Entity resolution that could not be decided deterministically or with a
+// single confident name match — parked for human review instead of guessing
+// (Phase 5). The fact that produced it is NOT published until resolved.
+model EntityResolutionCandidate {
+  id                    String     @id @default(uuid()) @db.Uuid
+  ingestionSourceId     String?
+  refName               String
+  refType               EntityType
+  refJurisdiction       String?
+  refExternalProvider   String?
+  refExternalIdentifier String?
+  candidateEntityIds    String[]   @default([]) // possible matches, for the reviewer
+  context               Json? // the EntityRef + surrounding fact context
+  status                String     @default("PENDING") // PENDING | RESOLVED | DISMISSED
+  resolvedEntityId      String?    @db.Uuid
+  resolvedBy            String?
+  createdAt             DateTime   @default(now())
+  resolvedAt            DateTime?
+
+  @@index([status])
+  @@index([refType, refName])
+}
+
 // ---------------------------------------------------------------- agents & ops
 
 model AgentRun {
