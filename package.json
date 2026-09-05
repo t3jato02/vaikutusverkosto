@@ -22,7 +22,8 @@
     "ingest:parliament": "tsx scripts/run-agent.ts parliament-agent",
     "ingest:procurement": "tsx scripts/run-agent.ts procurement-agent",
     "agent": "tsx scripts/run-agent.ts",
-    "ingest:seed": "tsx scripts/seed-demo.ts"
+    "ingest:seed": "tsx scripts/seed-demo.ts",
+    "release:gate": "node scripts/release-gate.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",
