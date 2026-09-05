@@ -1,18 +1,22 @@
-// Cron orchestrator — runs due agents.
-// Protected by middleware (CRON_SECRET bearer or admin session).
-// Vercel Cron: GET /api/cron/ingest
-// Manual admin trigger: POST /api/cron/ingest { agents?: ["parliament-agent", ...] }
+// Cron orchestrator — runs *due* ingestion sources (cadence from the Source
+// Registry). Protected by middleware (CRON_SECRET bearer or admin session).
+//   Vercel Cron:          GET  /api/cron/ingest
+//   Manual admin trigger: POST /api/cron/ingest { agents?: ["parliament-agent", ...] }
+//
+// Bounded execution: at most MAX_SOURCES_PER_TICK sources per invocation, each
+// with a per-source document budget; runs are resumable across ticks.
 
 import { NextResponse } from "next/server";
 import { runAgent } from "@/lib/agents/pipeline";
-import { getAdapter, listAdapters } from "@/lib/agents/registry";
+import { getAdapter } from "@/lib/agents/registry";
 import { syncRegistry } from "@/lib/agents/sourceRegistry";
+import { dueSources, runOptionsFor } from "@/lib/agents/scheduler";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // stay within Vercel Hobby limit; heavy work is chunked
+export const maxDuration = 120; // stay within Vercel limits; heavy work is chunked
 
 export async function GET() {
-  return runDue();
+  return runTick();
 }
 
 export async function POST(req: Request) {
@@ -21,38 +25,34 @@ export async function POST(req: Request) {
     const body = await req.json();
     if (Array.isArray(body?.agents)) agents = body.agents.map(String);
   } catch {
-    // fall through: run due agents
+    // fall through: run due sources
   }
-  return runDue(agents);
+  return runTick(agents);
 }
 
-async function runDue(only?: string[] | null) {
+async function runTick(only?: string[] | null) {
   const results: Record<string, unknown> = {};
-  // Keep the Source Registry in step with the code adapters before running.
+  // Keep the Source Registry in step with the code adapters first.
   await syncRegistry().catch((e) => console.error("registry sync failed", e));
-  const wanted = only && only.length ? only : listAdapters().map((a) => a.id);
-  for (const id of wanted) {
+
+  // Manual trigger runs exactly what was asked; cron runs what the scheduler
+  // says is due (cadence + enabled + resumable-in-progress).
+  const targets = only && only.length ? only : await dueSources();
+
+  for (const id of targets) {
     const adapter = getAdapter(id);
     if (!adapter) {
-      results[id] = { error: "unknown agent" };
+      results[id] = { error: "unknown source" };
       continue;
     }
-    // For manual triggers, run everything requested; for cron, respect schedule by day.
-    if (!only && adapter.schedule === "weekly" && new Date().getUTCDay() !== 1) {
-      results[id] = { skipped: "weekly agents run on Mondays" };
-      continue;
-    }
+    const opts = runOptionsFor(id);
     try {
-      // Bounded, resumable ticks: each cron invocation makes progress within
-      // the serverless budget and continues where it left off next time.
-      results[id] = await runAgent(adapter, {
-        concurrency: adapter.id === "parliament-agent" ? 6 : 2,
-        resume: true,
-        maxDocsPerTick: adapter.id === "parliament-agent" ? 10 : 1,
-      });
+      results[id] = await runAgent(adapter, { ...opts, resume: true });
     } catch (e) {
       results[id] = { error: (e as Error).message };
     }
   }
-  return NextResponse.json({ results });
+
+  if (Object.keys(results).length === 0) results["_"] = { note: "no sources due this tick" };
+  return NextResponse.json({ tick: new Date().toISOString(), results });
 }
