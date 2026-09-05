@@ -35,6 +35,7 @@ const FILTER_GROUPS: Record<string, { label: string; types: string[] }> = {
   appointment: { label: "Nimitykset", types: ["APPOINTED_BY", "APPOINTED_TO"] },
   lobbying: { label: "Vaikuttaminen", types: ["LOBBIED", "MET_WITH", "ADVISER_TO", "CONSULTING_PAYMENT"] },
   governance: { label: "Hallinto", types: ["BOARD_MEMBER_OF", "CHAIRS", "EMPLOYED_BY", "SUPERVISES", "REGULATES", "DECIDED"] },
+  education: { label: "Koulutus", types: ["EDUCATED_AT", "MEMBER_OF"] },
 };
 
 function nodeStyle(type: string): { shape: string; color: string } {

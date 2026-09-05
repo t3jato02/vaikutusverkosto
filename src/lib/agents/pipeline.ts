@@ -2,6 +2,7 @@
 // Handles run-locking (no overlapping runs), AgentRun records, source health, retries.
 
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { MAX_RUN_MINUTES, type RunContext, type RunReport, type SourceAdapter } from "./types";
 import { mapWithConcurrency, TransientError, sleep } from "./http";
@@ -11,30 +12,43 @@ export interface RunOptions {
   concurrency?: number;
   /** Allow taking over a stale RUNNING run. */
   staleAfterMs?: number;
+  /** Process at most this many documents per invocation, then pause (resumable). */
+  maxDocsPerTick?: number;
+  /** Continue a paused RUNNING run (same AgentRun row + cursor) instead of a new run. */
+  resume?: boolean;
+}
+
+interface RunCursor {
+  processed: string[];
+}
+
+/** Persist the resume cursor as Prisma JSON (named-interface → InputJson). */
+function cursorJson(c: RunCursor): Prisma.InputJsonValue {
+  return { processed: c.processed };
 }
 
 export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): Promise<RunReport> {
   const concurrency = opts.concurrency ?? 4;
   const staleAfterMs = opts.staleAfterMs ?? MAX_RUN_MINUTES * 60 * 1000;
 
-  // Acquire run lock: no overlapping RUNNING run within the stale window.
-  // A run is considered active if it has a fresh lockUntil (keepalive renews it).
-  const active = await db.agentRun.findFirst({
-    where: {
-      agent: adapter.id,
-      status: "RUNNING",
-      OR: [
-        { lockUntil: { gt: new Date() } },
-        { lockUntil: null, startedAt: { gt: new Date(Date.now() - staleAfterMs) } },
-      ],
-    },
-    select: { id: true },
+  // ------------------------------------------------------------------
+  // Lock + resume acquisition.
+  // - An actively-locked RUNNING run (fresh lockUntil) → skip (anti-overlap).
+  // - Otherwise, if resume is enabled and the latest run for this agent is
+  //   RUNNING with an expired/absent lock, continue the SAME run row using
+  //   its persisted cursor (only unprocessed documents are worked).
+  // ------------------------------------------------------------------
+  const latest = await db.agentRun.findFirst({
+    where: { agent: adapter.id },
+    orderBy: { startedAt: "desc" },
+    select: { id: true, status: true, lockUntil: true, lockToken: true, startedAt: true, metadata: true },
   });
-  if (active) {
+
+  if (latest && latest.status === "RUNNING" && latest.lockUntil && latest.lockUntil.getTime() > Date.now()) {
     return {
       agent: adapter.id,
       status: "SKIPPED",
-      runId: active.id,
+      runId: latest.id,
       sourceId: null,
       scanned: 0,
       proposed: 0,
@@ -47,15 +61,37 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
   }
 
   const lockToken = randomUUID();
-  const run = await db.agentRun.create({
-    data: {
-      agent: adapter.id,
-      status: "RUNNING",
-      details: adapter.name,
-      lockToken,
-      lockUntil: new Date(Date.now() + staleAfterMs),
-    },
-  });
+  const cursor: RunCursor = { processed: [] };
+  const resumeTarget =
+    opts.resume &&
+    latest &&
+    latest.status === "RUNNING" &&
+    (latest.lockUntil === null || (latest.lockUntil && latest.lockUntil.getTime() <= Date.now()))
+      ? latest
+      : null;
+
+  const run = resumeTarget
+    ? await db.agentRun.update({
+        where: { id: resumeTarget.id },
+        data: { lockToken, lockUntil: new Date(Date.now() + staleAfterMs), status: "RUNNING" },
+      })
+    : await db.agentRun.create({
+        data: {
+          agent: adapter.id,
+          status: "RUNNING",
+          details: adapter.name,
+          lockToken,
+          lockUntil: new Date(Date.now() + staleAfterMs),
+          metadata: cursorJson(cursor),
+        },
+      });
+
+  if (resumeTarget) {
+    const prev = (resumeTarget.metadata as RunCursor | null) ?? { processed: [] };
+    cursor.processed = Array.isArray(prev.processed) ? prev.processed : [];
+  }
+
+  const resumedCount = cursor.processed.length;
 
   const source = await ensureSource(db, {
     url: adapter.baseUrl,
@@ -75,16 +111,21 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
   };
 
   try {
-    // Keep the lock fresh during a long run.
+    // Keep the lock fresh during an active tick.
     const keepalive = setInterval(() => {
       db.agentRun.update({ where: { id: run.id }, data: { lockUntil: new Date(Date.now() + staleAfterMs) } }).catch(() => {});
     }, Math.floor(staleAfterMs / 2));
 
     const docs = await adapter.discover(ctx);
+    const pending = docs.filter((d) => !cursor.processed.includes(d.id));
     stats.scanned = docs.length;
-    ctx.log(`discovered ${docs.length} documents`);
+    ctx.log(`discovered ${docs.length} documents (${pending.length} pending, ${cursor.processed.length} done)`);
 
-    await mapWithConcurrency(docs, concurrency, async (doc) => {
+    const budget = opts.maxDocsPerTick ? Math.min(pending.length, Math.max(opts.maxDocsPerTick, 1)) : pending.length;
+    const tick = pending.slice(0, budget);
+    const budgetHit = pending.length > tick.length;
+
+    await mapWithConcurrency(tick, concurrency, async (doc) => {
       try {
         const raw = await withRetries(() => adapter.fetch(ctx, doc));
         const facts = await adapter.parse(ctx, doc, raw);
@@ -119,6 +160,7 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
             await adapter.onFactPublished(ctx, fact, result.entityIds);
           }
         }
+        cursor.processed.push(doc.id);
       } catch (e) {
         stats.errors++;
         ctx.log(`error on ${doc.id}: ${(e as Error).message}`);
@@ -126,6 +168,25 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
     });
 
     clearInterval(keepalive);
+
+    if (budgetHit) {
+      // Tick budget exhausted — pause resumably: release the lock, persist the
+      // cursor, keep the run open so the next invocation can continue it.
+      await db.agentRun.update({
+        where: { id: run.id },
+        data: { lockUntil: null, metadata: cursorJson(cursor), sourceId: source.id, recordsScanned: stats.scanned },
+      });
+      return {
+        agent: adapter.id,
+        status: "PARTIAL",
+        runId: run.id,
+        sourceId: source.id,
+        ...stats,
+        skippedLock: false,
+        continuing: true,
+      };
+    }
+
     await markSourceSuccess(db, source.id);
 
     const status: "SUCCESS" | "PARTIAL" = stats.errors > 0 ? "PARTIAL" : "SUCCESS";
@@ -143,9 +204,23 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
         recordsUpdated: stats.updated,
         errors: stats.errors,
         lockUntil: null,
+        metadata: cursorJson(cursor),
       },
     });
-    return { agent: adapter.id, status, runId: run.id, sourceId: source.id, ...stats, skippedLock: false };
+    return {
+      agent: adapter.id,
+      status,
+      runId: run.id,
+      sourceId: source.id,
+      scanned: stats.scanned,
+      proposed: stats.proposed,
+      created: stats.created,
+      updated: stats.updated,
+      rejected: stats.rejected,
+      errors: stats.errors,
+      skippedLock: false,
+      ...(resumedCount > 0 ? { continuing: false } : {}),
+    };
   } catch (e) {
     await markSourceFailure(db, source.id, String(e));
     await db.agentRun.update({
@@ -163,6 +238,7 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
         errors: stats.errors + 1,
         details: String(e),
         lockUntil: null,
+        metadata: cursorJson(cursor),
       },
     });
     return { agent: adapter.id, status: "FAILED", runId: run.id, sourceId: source.id, ...stats, skippedLock: false };

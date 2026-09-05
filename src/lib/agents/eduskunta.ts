@@ -50,6 +50,7 @@ interface MemberDetail {
       AiemmatToimielinjasenyydet?: { Toimielin?: CommitteeMembership[] };
       Edustajatoimet?: { Edustajatoimi?: { AlkuPvm?: string; LoppuPvm?: string }[] };
       Vaalipiirit?: { NykyinenVaalipiiri?: { Nimi?: string } };
+      Koulutukset?: { Koulutus?: { Nimi?: string; Vuosi?: number; Oppilaitos?: string }[] };
     };
   };
 }
@@ -72,6 +73,21 @@ function committeeKey(name: string): string {
     .replace(/[^a-z0-9äöå]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return `name:${slug}`;
+}
+
+function institutionSlug(name: string): string {
+  // Stable external id for educational institutions from the same official
+  // registry — identical name always resolves to the same institution.
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ä/g, "a")
+    .replace(/ö/g, "o")
+    .replace(/å/g, "a")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "institution";
 }
 
 export const eduskuntaAdapter: SourceAdapter = {
@@ -171,6 +187,55 @@ export const eduskuntaAdapter: SourceAdapter = {
       evidenceUrl: doc.url,
       sourceProfile: personProfile,
     });
+
+    // Minister status — from the official seat list (minister flag).
+    if (row.minister === true) {
+      facts.push({
+        kind: "relationship",
+        source: personRef,
+        target: {
+          type: EntityType.GOVERNMENT_BODY,
+          name: "Valtioneuvosto",
+          jurisdiction: "FI",
+          externalId: { provider: "eduskunta", identifier: "valtioneuvosto" },
+        },
+        relationshipType: RelationshipType.MEMBER_OF,
+        role: "Ministeri",
+        startDate: start,
+        endDate: end,
+        confidence: "VERIFIED",
+        evidenceUrl: `${BASE}/seating/`,
+        sourceProfile: personProfile,
+      });
+    }
+
+    // Education (Koulutukset) — official, publicly declared degree data.
+    // Tolerates both { Koulutus: [...] } and [{ Koulutus: [...] }, ...] shapes.
+    for (const block of toArray(h.Koulutukset)) {
+      for (const k of toArray(block?.Koulutus)) {
+        const institution = String(k.Oppilaitos ?? "").trim();
+        const degree = String(k.Nimi ?? "").trim();
+        const year = typeof k.Vuosi === "number" ? k.Vuosi : null;
+        if (!institution) continue;
+        facts.push({
+          kind: "relationship",
+          source: personRef,
+          target: {
+            type: EntityType.EDUCATIONAL_INSTITUTION,
+            name: institution,
+            jurisdiction: "FI",
+            externalId: { provider: "eduskunta-institution", identifier: institutionSlug(institution) },
+          },
+          relationshipType: RelationshipType.EDUCATED_AT,
+          role: degree || "Opiskelija",
+          startDate: year ? new Date(Date.UTC(year, 0, 1)) : null,
+          endDate: null,
+          confidence: "VERIFIED",
+          evidenceUrl: doc.url,
+          sourceProfile: personProfile,
+        });
+      }
+    }
 
     // Committee memberships (current + former)
     const committees: CommitteeMembership[] = [

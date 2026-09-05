@@ -40,7 +40,13 @@ async function runDue(only?: string[] | null) {
       continue;
     }
     try {
-      results[id] = await runAgent(adapter, { concurrency: adapter.id === "parliament-agent" ? 6 : 2 });
+      // Bounded, resumable ticks: each cron invocation makes progress within
+      // the serverless budget and continues where it left off next time.
+      results[id] = await runAgent(adapter, {
+        concurrency: adapter.id === "parliament-agent" ? 6 : 2,
+        resume: true,
+        maxDocsPerTick: adapter.id === "parliament-agent" ? 10 : 1,
+      });
     } catch (e) {
       results[id] = { error: (e as Error).message };
     }

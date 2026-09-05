@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Hallinta" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const [entityCount, relCount, verifiedCount, pendingCount, flowCount, corrections, runs, conflictCount, disputedCount] =
+  const [entityCount, relCount, verifiedCount, pendingCount, flowCount, corrections, runs, conflictCount, disputedCount, changesCount] =
     await Promise.all([
       db.entity.count(),
       db.relationship.count(),
@@ -19,6 +19,7 @@ export default async function AdminPage() {
       getLatestAgentRuns(10),
       db.changeLog.count({ where: { eventType: "IDENTITY_MERGED" } }),
       db.relationship.count({ where: { confidence: "DISPUTED" } }),
+      db.changeLog.count(),
     ]);
 
   const stats = [
@@ -29,6 +30,7 @@ export default async function AdminPage() {
     { label: "Odottaa tarkistusta", value: pendingCount },
     { label: "Riidatut suhteet", value: disputedCount },
     { label: "Identiteettikonfliktit", value: conflictCount },
+    { label: "Muutokset yhteensä", value: changesCount },
   ];
 
   return (
@@ -48,7 +50,7 @@ export default async function AdminPage() {
       </header>
 
       <section aria-label="Kattavuus">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
           {stats.map((s) => (
             <div key={s.label} className="card">
               <div className="text-xl font-bold tabular-nums tracking-tight">{s.value}</div>
@@ -61,18 +63,22 @@ export default async function AdminPage() {
       <section aria-label="Agenttien ajot">
         <h2 className="card-title mb-2">AGENTTIEN AJOT</h2>
         <ul className="card divide-y divide-ink-100">
-          {runs.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
-              <span className="font-medium text-ink-900">{r.agent}</span>
-              <span className="text-ink-500">
-                {formatDate(r.startedAt)} · {r.recordsScanned} tietuetta · {r.factsProposed} ehdotettu ·{" "}
-                {r.factsAccepted} hyväksytty · {r.errors} virhettä
-              </span>
-              <span className={`font-semibold ${r.status === "SUCCESS" ? "text-emerald-600" : r.status === "PARTIAL" ? "text-amber-600" : "text-red-600"}`}>
-                {r.status}
-              </span>
-            </li>
-          ))}
+{runs.map((r) => {
+              const durMs = r.finishedAt ? r.finishedAt.getTime() - r.startedAt.getTime() : null;
+              const dur = durMs != null && durMs >= 0 ? `${Math.max(1, Math.round(durMs / 1000))} s` : "kesken";
+              return (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                  <span className="font-medium text-ink-900">{r.agent}</span>
+                  <span className="text-ink-500">
+                    {formatDate(r.startedAt)} · {dur} · {r.recordsScanned} tietuetta · {r.factsProposed} ehdotettu ·{" "}
+                    {r.factsAccepted} hyväksytty · {r.errors} virhettä
+                  </span>
+                  <span className={`font-semibold ${r.status === "SUCCESS" ? "text-emerald-600" : r.status === "PARTIAL" ? "text-amber-600" : "text-red-600"}`}>
+                    {r.status}
+                  </span>
+                </li>
+              );
+            })}
         </ul>
       </section>
 

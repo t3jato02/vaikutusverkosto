@@ -9,6 +9,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const adapter = getAdapter(id);
   if (!adapter) return NextResponse.json({ error: "unknown_agent" }, { status: 404 });
-  const report = await runAgent(adapter);
+  // Admin triggers continue a paused run (resumable ticks) when one exists.
+  const report = await runAgent(adapter, { resume: true });
   return NextResponse.json({ report });
 }

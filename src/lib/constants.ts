@@ -64,6 +64,7 @@ export const RELATIONSHIP_TYPE_LABELS: Record<RelationshipType, Label> = {
   PART_OF: { fi: "kuuluu", en: "part of" },
   CANDIDATE_OF: { fi: "ehdokas", en: "candidate of" },
   SITS_IN: { fi: "istuu", en: "sits in" },
+  EDUCATED_AT: { fi: "opiskellut", en: "educated at" },
 };
 
 export const FLOW_TYPE_LABELS: Record<FlowType, Label> = {
