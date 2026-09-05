@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== "production";
 
+// Deployment identity, baked at build time and exposed by /api/version.
+// CLI deploys: vercel deploy --prod --build-env BUILD_SHA=$(git rev-parse HEAD)
+const BUILD_SHA = process.env.BUILD_SHA || process.env.VERCEL_GIT_COMMIT_SHA || "unknown";
+const BUILD_TIME = new Date().toISOString();
+
 // Content-Security-Policy.
 //   script-src:
 //     'unsafe-eval' — required only in development (React Fast Refresh /
@@ -28,6 +33,7 @@ const CSP = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  env: { BUILD_SHA, BUILD_TIME },
   async headers() {
     // CORS is scoped to the public READ API only. Cross-origin use of the open
     // data endpoints is intentional (see /api docs). Write/auth/admin/cron

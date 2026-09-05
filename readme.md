@@ -92,10 +92,17 @@ all output is React-escaped, so there is no current injection sink.
 ## Release gate
 
 ```bash
-npm run release:gate                 # lint, typecheck, tests, build, migrations, env → GO / NO-GO
+npm run release:gate                 # lint, typecheck, tests, build, migrations status,
+                                     # critical env, + data invariants (evidence /
+                                     # verification status / confidence range) → GO / NO-GO
 node scripts/release-gate.mjs --full # + Playwright e2e (needs build + start on :3000)
-node scripts/release-gate.mjs --smoke https://vaikutusverkosto.vercel.app
+node scripts/release-gate.mjs --smoke https://vaikutusverkosto.vercel.app \
+     --expect-sha $(git rev-parse HEAD)          # + production URL/API smoke + SHA match
+# SMOKE_EXPECT_UPSTASH=1 also asserts /api/version reports rateLimitBackend=upstash
 ```
+
+`GET /api/version` reports `{ sha, builtAt, env, rateLimitBackend }` (no secrets).
+Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git rev-parse HEAD)`.
 
 ## Scripts
 
