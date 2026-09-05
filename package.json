@@ -23,6 +23,7 @@
     "ingest:procurement": "tsx scripts/run-agent.ts procurement-agent",
     "agent": "tsx scripts/run-agent.ts",
     "ingest:seed": "tsx scripts/seed-demo.ts",
+    "registry:sync": "tsx scripts/sync-source-registry.ts",
     "release:gate": "node scripts/release-gate.mjs"
   },
   "dependencies": {

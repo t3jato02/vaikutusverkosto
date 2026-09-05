@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { runAgent } from "@/lib/agents/pipeline";
 import { getAdapter, listAdapters } from "@/lib/agents/registry";
+import { syncRegistry } from "@/lib/agents/sourceRegistry";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // stay within Vercel Hobby limit; heavy work is chunked
@@ -27,6 +28,8 @@ export async function POST(req: Request) {
 
 async function runDue(only?: string[] | null) {
   const results: Record<string, unknown> = {};
+  // Keep the Source Registry in step with the code adapters before running.
+  await syncRegistry().catch((e) => console.error("registry sync failed", e));
   const wanted = only && only.length ? only : listAdapters().map((a) => a.id);
   for (const id of wanted) {
     const adapter = getAdapter(id);

@@ -102,6 +102,14 @@ export interface AdapterResult {
   errors: number;
 }
 
+export type ReliabilityTierName =
+  | "OFFICIAL_PRIMARY"
+  | "OFFICIAL_REGISTER"
+  | "PUBLIC_DISCLOSURE"
+  | "ANNUAL_REPORT"
+  | "REPUTABLE_MEDIA"
+  | "OTHER";
+
 export interface SourceAdapter {
   id: string;
   name: string;
@@ -111,6 +119,17 @@ export interface SourceAdapter {
   /** Base evidence URL of the source. */
   baseUrl: string;
   publisher: string;
+  // ---- Source Registry metadata (Sprint B). Optional; sensible defaults. ----
+  /** Intrinsic provenance strength. Defaults to OFFICIAL_PRIMARY. */
+  reliabilityTier?: ReliabilityTierName;
+  /** Access shape. Defaults to "API". */
+  format?: "API" | "HTML" | "PDF" | "RSS";
+  /** Ingestion cadence; defaults to `schedule`. */
+  updateCadence?: "daily" | "weekly" | "monthly";
+  /** URL of the source's terms of use / licence, if any. */
+  termsUrl?: string;
+  /** Free-text operator notes (licence, quirks, restrictions). */
+  notes?: string;
   /** Discover the documents to ingest (idempotent list). */
   discover(ctx: RunContext): Promise<SourceDocument[]>;
   /** Fetch raw content for a document. */
