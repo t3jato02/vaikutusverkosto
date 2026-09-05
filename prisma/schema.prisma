@@ -509,10 +509,56 @@ model IngestionSource {
   lastErrorAt         DateTime?
   lastError           String?         @db.Text
   consecutiveFailures Int             @default(0)
+  // Rolling counters from the most recent completed run (Phase 15/16).
+  lastRunDocsChecked   Int            @default(0)
+  lastRunDocsChanged   Int            @default(0)
+  lastRunDurationMs    Int?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
+  documents           SourceDocument[]
+
   @@index([enabled])
+}
+
+// Lifecycle of one unit of ingested source material (Phase 2). One row per
+// (source, externalId); revisions are tracked by contentHash + lastChangedAt.
+enum DocumentProcessingStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  SKIPPED_UNCHANGED
+}
+
+model SourceDocument {
+  id                String                   @id @default(uuid()) @db.Uuid
+  ingestionSourceId String
+  ingestionSource   IngestionSource          @relation(fields: [ingestionSourceId], references: [id], onDelete: Cascade)
+  externalId        String // stable per-source document id
+  canonicalUrl      String
+  documentType      String                   @default("json") // json | html | pdf | text
+  title             String?
+  publishedAt       DateTime?
+  retrievedAt       DateTime                 @default(now())
+  contentHash       String
+  mimeType          String?
+  rawJson           Json?
+  rawText           String?                  @db.Text
+  storageRef        String? // object-storage key when the payload is too large for a column
+  parserVersion     String?
+  processingStatus  DocumentProcessingStatus @default(PENDING)
+  processingError   String?                  @db.Text
+  firstSeenAt       DateTime                 @default(now())
+  lastSeenAt        DateTime                 @default(now())
+  lastChangedAt     DateTime                 @default(now())
+  revision          Int                      @default(1)
+  metadata          Json?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@unique([ingestionSourceId, externalId])
+  @@index([ingestionSourceId, processingStatus])
+  @@index([contentHash])
 }
 
 // ---------------------------------------------------------------- agents & ops
