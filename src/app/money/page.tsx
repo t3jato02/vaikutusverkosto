@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getMoneyAggregates, entityUrlFor } from "@/lib/queries";
 import { FLOW_TYPE_LABELS } from "@/lib/constants";
 import { formatEur } from "@/lib/format";
+import { publicVisibleWhere } from "@/lib/verification";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ export default async function MoneyPage() {
   const [aggregates, flows] = await Promise.all([
     getMoneyAggregates(),
     db.financialFlow.findMany({
+      where: publicVisibleWhere,
       orderBy: { amount: "desc" },
       take: 50,
       include: {

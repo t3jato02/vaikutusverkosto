@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { resolveShortId } from "@/lib/queries";
 import { relationshipLabel } from "@/lib/constants";
+import { publicVisibleWhere } from "@/lib/verification";
 
 export const metadata: Metadata = { title: "Selvitä yhteydet" };
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ interface Neighbor {
 
 async function neighborsOf(id: string): Promise<Neighbor[]> {
   const rels = await db.relationship.findMany({
-    where: { OR: [{ sourceEntityId: id }, { targetEntityId: id }] },
+    where: { OR: [{ sourceEntityId: id }, { targetEntityId: id }], ...publicVisibleWhere },
     select: {
       id: true,
       sourceEntityId: true,

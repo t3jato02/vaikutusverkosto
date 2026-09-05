@@ -205,6 +205,26 @@ enum VerificationState {
   CONFLICTED
 }
 
+// Canonical verification lifecycle (A7). Distinct from the legacy
+// VerificationState (kept for back-compat during migration).
+//   AUTO_DETECTED    - agent/parser found it; not yet sufficiently confirmed.
+//   SOURCE_CONFIRMED - an original/strong public source supports THIS claim.
+//   HUMAN_VERIFIED   - a reviewer checked the source and accepted it. Never
+//                      set by an agent.
+//   DISPUTED         - a credible conflict or correction request exists.
+//   REJECTED         - an automated detection was found to be wrong. Not shown
+//                      as a normal confirmed connection.
+//   STALE            - was valid; current state likely changed or source aged.
+//                      Not deleted — history is preserved.
+enum VerificationStatus {
+  AUTO_DETECTED
+  SOURCE_CONFIRMED
+  HUMAN_VERIFIED
+  DISPUTED
+  REJECTED
+  STALE
+}
+
 model Relationship {
   id               String            @id @default(uuid()) @db.Uuid
   sourceEntityId   String            @db.Uuid
@@ -221,8 +241,10 @@ model Relationship {
   description      String?           @db.Text
   status           EntityStatus      @default(ACTIVE)
   confidence       Confidence        @default(HIGH)
+  confidenceScore  Float?            // 0.0-1.0; DB CHECK constraint. Not a proof of fact.
   evidenceStrength String? // "single_source" | "multiple_primary" | ...
   verificationState VerificationState @default(PUBLISHED)
+  verificationStatus VerificationStatus @default(AUTO_DETECTED)
   firstSeen        DateTime?         @default(now())
   lastVerifiedAt   DateTime?
   createdAt        DateTime          @default(now())
@@ -237,6 +259,7 @@ model Relationship {
   @@index([targetEntityId])
   @@index([relationshipType])
   @@index([sourceEntityId, relationshipType])
+  @@index([verificationStatus])
 }
 
 // ---------------------------------------------------------------- money flows
@@ -281,7 +304,9 @@ model FinancialFlow {
   purpose                   String?  @db.Text
   description               String?  @db.Text
   confidence                Confidence @default(HIGH)
+  confidenceScore           Float?   // 0.0-1.0; DB CHECK constraint.
   verificationState         VerificationState @default(PUBLISHED)
+  verificationStatus        VerificationStatus @default(AUTO_DETECTED)
   sourceCount               Int      @default(1)
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
@@ -295,6 +320,7 @@ model FinancialFlow {
   @@index([flowType])
   @@index([flowDate])
   @@index([currency])
+  @@index([verificationStatus])
 }
 
 // ---------------------------------------------------------------- positions
