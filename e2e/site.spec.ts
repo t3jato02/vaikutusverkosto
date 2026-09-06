@@ -1,5 +1,16 @@
 import { test, expect } from "@playwright/test";
 
+// WebKit (unlike Chromium) refuses `Secure` cookies over plain http://localhost,
+// so the session-cookie login flow can't complete against a local production
+// build served over HTTP. It works on real Safari over HTTPS (production). Skip
+// only that specific combination.
+function skipWebkitHttpAuth(browserName: string, baseURL: string | undefined) {
+  test.skip(
+    browserName === "webkit" && !(baseURL ?? "").startsWith("https"),
+    "WebKit drops Secure session cookies over http://localhost",
+  );
+}
+
 test.describe("public navigation", () => {
   test("home loads and shows purpose + real stats", async ({ page }) => {
     const errors: string[] = [];
@@ -151,7 +162,8 @@ test.describe("admin access protection", () => {
     expect(res.status()).toBe(401);
   });
 
-  test("admin can log in and access dashboard", async ({ page }) => {
+  test("admin can log in and access dashboard", async ({ page, browserName, baseURL }) => {
+    skipWebkitHttpAuth(browserName, baseURL);
     const password = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "dev-admin-password";
     await page.goto("/login");
     await page.getByLabel("Salasana").fill(password);
@@ -160,7 +172,8 @@ test.describe("admin access protection", () => {
     await expect(page.getByRole("heading", { name: /Hallinta/ })).toBeVisible();
   });
 
-  test("admin ingestion + review pages render", async ({ page }) => {
+  test("admin ingestion + review pages render", async ({ page, browserName, baseURL }) => {
+    skipWebkitHttpAuth(browserName, baseURL);
     const password = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "dev-admin-password";
     await page.goto("/login");
     await page.getByLabel("Salasana").fill(password);
@@ -268,7 +281,8 @@ test.describe("corrections", () => {
 });
 
 test.describe("logout", () => {
-  test("logout clears session and returns to same origin", async ({ page }) => {
+  test("logout clears session and returns to same origin", async ({ page, browserName, baseURL }) => {
+    skipWebkitHttpAuth(browserName, baseURL);
     const password = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "dev-admin-password";
     await page.goto("/login");
     await page.getByLabel("Salasana").fill(password);
