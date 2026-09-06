@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { searchEntities, searchMoney } from "@/lib/queries";
+import { searchEntities, searchMoney, searchProjects, projectUrlFor } from "@/lib/queries";
 import { entityLabel } from "@/lib/constants";
 import { formatEur } from "@/lib/format";
 import Avatar from "@/components/Avatar";
@@ -35,8 +35,13 @@ export default async function SearchPage({
 
   let results: Awaited<ReturnType<typeof searchEntities>> = [];
   let money: Awaited<ReturnType<typeof searchMoney>> = [];
+  let projects: Awaited<ReturnType<typeof searchProjects>> = [];
   if (query) {
-    [results, money] = await Promise.all([searchEntities(query, 50), searchMoney(query, 5)]);
+    [results, money, projects] = await Promise.all([
+      searchEntities(query, 50),
+      searchMoney(query, 5),
+      searchProjects(query, 15),
+    ]);
   }
 
   const grouped = new Map<string, typeof results>();
@@ -66,7 +71,7 @@ export default async function SearchPage({
 
       {!query && <p className="text-sm text-ink-500">Kirjoita hakusana aloittaaksesi.</p>}
 
-      {query && results.length === 0 && money.length === 0 && (
+      {query && results.length === 0 && money.length === 0 && projects.length === 0 && (
         <p className="text-sm text-ink-500">
           Ei tuloksia haulle “{query}”. Kokeile toista kirjoitusasua tai nimeä.
         </p>
@@ -96,6 +101,27 @@ export default async function SearchPage({
             </ul>
           </section>
         ))}
+
+      {projects.length > 0 && (
+        <section>
+          <h2 className="card-title mb-2">HANKKEET</h2>
+          <ul className="card divide-y divide-ink-100">
+            {projects.map((p) => (
+              <li key={p.id}>
+                <Link href={projectUrlFor(p.id, p.name)} className="flex items-center justify-between gap-3 py-2.5 hover:bg-ink-100/60">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-ink-900 [overflow-wrap:anywhere]">{p.name}</span>
+                    <span className="block truncate text-xs text-ink-500">
+                      {[p.programme, p.flows[0]?.recipientEntity?.canonicalName].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[11px] text-ink-300">HANKE</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {money.length > 0 && (
         <section>

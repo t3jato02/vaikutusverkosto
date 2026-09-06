@@ -12,6 +12,7 @@
 import { Prisma } from "@prisma/client";
 import type { PrismaClient } from "@prisma/client";
 import type { EntityRef } from "./types";
+import { classifyEntityCategory } from "@/lib/entityCategory";
 
 export type MatchType = "DETERMINISTIC" | "PROBABLE";
 
@@ -131,7 +132,13 @@ async function createEntity(
       municipality: ref.municipality ?? null,
       country: ref.countryCode === "EU" ? "EU" : "FI",
       countryCode: ref.countryCode ?? (ref.jurisdiction === "EU" ? "EU" : "FI"),
-      entityCategory: ref.entityCategory ?? undefined,
+      // Adapter-supplied category wins; otherwise a deterministic name-rule
+      // classification (never an LLM guess), left null when nothing fires.
+      entityCategory:
+        ref.entityCategory ??
+        (ref.type !== "PERSON"
+          ? (classifyEntityCategory({ name, countryCode: ref.countryCode, jurisdiction: ref.jurisdiction }) ?? undefined)
+          : undefined),
       description: ref.description ?? null,
       confidence: "HIGH",
       sourceCount: 1,
