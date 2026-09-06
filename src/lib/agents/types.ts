@@ -35,6 +35,11 @@ export interface NormalizedFact {
   dedupeKey?: string;
   /** Profile metadata for the source entity (used by adapter profile hooks only). */
   sourceProfile?: Record<string, unknown>;
+  /** Extraction provenance. "rule"/"llm"/"manual" route to the candidate lane. */
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  /** Source explicitly asserts a present-day active role. */
+  assertedCurrent?: boolean;
 }
 
 /** A fact proposed by an agent, ready for verification + publication. */

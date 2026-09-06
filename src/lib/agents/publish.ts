@@ -124,7 +124,9 @@ export async function publishVerifiedFact(
     // LLM/semantic extraction and non-official sources are parked.
     const method = fact.extractionMethod ?? "deterministic-parser";
     const wouldConfirm = deriveAgentStatus({ sourceType: fact.sourceType, confidence: fact.confidence }) === "SOURCE_CONFIRMED";
-    if (method === "llm" || method === "manual" || !wouldConfirm) {
+    // Only a deterministic parse of a structured official field auto-publishes.
+    // Any interpretation of free text (rule/llm) or a weaker source → review.
+    if (method !== "deterministic-parser" || !wouldConfirm) {
       const { candidateId } = await recordRelationshipCandidate(db, {
         fact,
         resolvedSourceEntityId: src.entityId,

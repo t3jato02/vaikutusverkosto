@@ -209,6 +209,10 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
             sourceType: adapter.sourceType,
             sourceName: adapter.name,
             publisher: adapter.publisher,
+            extractionMethod: fact.extractionMethod,
+            extractorVersion: fact.extractorVersion,
+            sourceDocumentId: cd.documentId,
+            assertedCurrent: fact.assertedCurrent,
           };
           const result = await publishVerifiedFact(ctx, proposed);
           if (result.action === "rejected") {
