@@ -762,6 +762,25 @@ model SourceConflict {
   @@index([relationshipId])
 }
 
+// Cached network-analytics result (Sprint C3). Keyed by scope + filters +
+// algorithm version. Recomputed when the underlying graph changes.
+model NetworkAnalytics {
+  id                String   @id @default(uuid()) @db.Uuid
+  scope             String // organisational | funding | decision | ownership | international
+  scopeHash         String   @unique
+  filters           Json
+  temporal          String   @default("current") // current | historical | all
+  algorithm         String   @default("degree+brandes-betweenness")
+  algorithmVersion  String
+  nodeCount         Int
+  edgeCount         Int
+  result            Json
+  graphMaxUpdatedAt DateTime
+  calculatedAt      DateTime @default(now())
+
+  @@index([scope])
+}
+
 // Immutable audit trail for every human review action (Phase 12). Actor is the
 // role ("admin"), never PII.
 model ReviewAction {

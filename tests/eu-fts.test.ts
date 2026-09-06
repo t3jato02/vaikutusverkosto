@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import "dotenv/config";
-import { euFtsAdapter } from "@/lib/agents/euFts";
+import { euFtsAdapter, recordKey, type FtsRecord } from "@/lib/agents/euFts";
 import type { RunContext } from "@/lib/agents/types";
 import { db } from "@/lib/db";
 
@@ -58,7 +58,7 @@ describe("EU FTS parser (Sprint C2)", () => {
     expect(f.projectRef?.sourceIdentifier).toBe("eu:101099693");
     expect(f.projectRef?.name).toContain("TESTACR");
     expect(f.periodYear).toBe(2023);
-    expect(f.startDate).toBeInstanceOf(Date);
+    expect(f.periodStart).toBeInstanceOf(Date);
   });
 
   it("maps a service/advisory contract to PROCUREMENT", async () => {
@@ -80,6 +80,28 @@ describe("EU FTS parser (Sprint C2)", () => {
     expect(euFtsAdapter.sourceType).toBe("OFFICIAL_REGISTER");
     expect(euFtsAdapter.reliabilityTier).toBe("OFFICIAL_REGISTER");
     expect(euFtsAdapter.updateCadence).toBe("monthly");
+  });
+
+  it("cross-year dedup: recordKey embeds the year, so annual records never collide", () => {
+    const base = rec() as unknown as FtsRecord;
+    const k23 = recordKey({ ...base, year: 2023 });
+    const k22 = recordKey({ ...base, year: 2022 });
+    expect(k23).not.toBe(k22);
+    expect(k23).toContain("eu-fts:2023:");
+    expect(k22).toContain("eu-fts:2022:");
+    // Two rows with no LC/budgetRef but different subjects → distinct keys.
+    const noref = { ...base, lc: "", budgetRef: "" };
+    expect(recordKey({ ...noref, subject: "Project A" })).not.toBe(recordKey({ ...noref, subject: "Project B" }));
+    // Identical rows → identical key (stable).
+    expect(recordKey({ ...noref, subject: "X" })).toBe(recordKey({ ...noref, subject: "X" }));
+  });
+
+  it("no award/payment date is invented — flowDate stays null, project period is kept", async () => {
+    const [f] = await euFtsAdapter.parse(ctx, doc, rec());
+    expect(f.startDate).toBeNull();
+    expect(f.endDate).toBeNull();
+    expect(f.periodStart).toBeInstanceOf(Date);
+    expect(f.periodYear).toBe(2023);
   });
 });
 

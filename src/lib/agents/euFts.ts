@@ -19,9 +19,11 @@ import type { NormalizedFact, SourceAdapter, SourceDocument } from "./types";
 const DATASET_URL = (year: number) =>
   `https://ec.europa.eu/budget/financial-transparency-system/download/${year}_FTS_dataset_en.xlsx`;
 
-// Years to ingest. Keep small; each is a ~20 MB download + stream parse.
-const YEARS = [2023];
-const PARSER_VERSION = "eu-fts-1";
+// Years to ingest, newest first. Only years actually published by the official
+// source (data.europa.eu currently goes up to 2023). Each is a separate ~20 MB
+// download + stream parse; a failing year never corrupts the others.
+const YEARS = [2023, 2022];
+const PARSER_VERSION = "eu-fts-2";
 
 const EC_REF = {
   type: EntityType.GOVERNMENT_BODY,
@@ -45,7 +47,7 @@ function categoryOf(benefType: string, ngo: string):
   return "OTHER";
 }
 
-interface FtsRecord {
+export interface FtsRecord {
   year: number;
   lc: string;
   budgetRef: string;
@@ -160,9 +162,20 @@ async function streamFinnishRecords(path: string, year: number, log: (m: string)
   return out;
 }
 
-function recordKey(r: FtsRecord): string {
+export function recordKey(r: FtsRecord): string {
   const who = vatToYtunnus(r.vat) ?? r.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
-  return `eu-fts:${r.year}:${r.lc || "nolc"}:${r.budgetRef || "nobr"}:${who}`;
+  // Year keeps annual records separate (Phase 5). When the source gives no
+  // legal-commitment / budget reference, fall back to a stable hash of the
+  // remaining fields so distinct rows are never collapsed.
+  const refs = `${r.lc}|${r.budgetRef}`;
+  const tail = refs.replace(/\|/g, "") ? refs : `h${simpleHash(`${r.subject}|${r.programme}|${r.amount}|${r.contractType}`)}`;
+  return `eu-fts:${r.year}:${tail}:${who}`;
+}
+
+function simpleHash(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
 }
 
 function projectRefOf(r: FtsRecord) {
@@ -201,17 +214,22 @@ export const euFtsAdapter: SourceAdapter = {
   async discover(ctx): Promise<SourceDocument[]> {
     const docs: SourceDocument[] = [];
     for (const year of YEARS) {
-      const path = await ensureXlsx(year, ctx.log);
-      const records = await streamFinnishRecords(path, year, ctx.log);
-      for (const r of records) {
-        docs.push({
-          id: recordKey(r),
-          url: `${DATASET_URL(year)}#${encodeURIComponent(r.lc || r.budgetRef || r.name)}`,
-          title: `EU FTS ${year} — ${r.name} (${r.lc || r.budgetRef})`,
-          publishedAt: null,
-          hash: "",
-          meta: r,
-        });
+      try {
+        const path = await ensureXlsx(year, ctx.log);
+        const records = await streamFinnishRecords(path, year, ctx.log);
+        for (const r of records) {
+          docs.push({
+            id: recordKey(r),
+            url: `${DATASET_URL(year)}#${encodeURIComponent(r.lc || r.budgetRef || r.name)}`,
+            title: `EU FTS ${year} — ${r.name} (${r.lc || r.budgetRef})`,
+            publishedAt: null,
+            hash: "",
+            meta: r,
+          });
+        }
+      } catch (e) {
+        // One year failing must not corrupt the others.
+        ctx.log(`FTS ${year}: skipped — ${(e as Error).message}`);
       }
     }
     return docs;
@@ -250,8 +268,11 @@ export const euFtsAdapter: SourceAdapter = {
         currency: "EUR",
         funderCountryCode: "EU",
         recipientCountryCode: "FI",
-        startDate: start,
-        endDate: end,
+        // FTS gives a funding (budget) year and a project period. It does NOT
+        // give an award or payment date — so flowDate stays null; the project
+        // period lives on periodStart/End and on the Project row.
+        startDate: null,
+        endDate: null,
         periodStart: start,
         periodEnd: end,
         periodYear: r.year,

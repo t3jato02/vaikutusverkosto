@@ -73,18 +73,18 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
       </section>
 
       <form className="card flex flex-wrap items-end gap-3 text-sm" method="get">
-        <label className="block">
+        <label className="block min-w-0 flex-1">
           <span className="label mb-1 block text-xs">Maa</span>
-          <select name="country" defaultValue={sp.country ?? ""} className="input h-8 py-0">
+          <select name="country" defaultValue={sp.country ?? ""} className="input h-8 w-full max-w-full py-0">
             <option value="">Kaikki</option>
             {overview.countries.map((c) => (
               <option key={c.iso2} value={c.iso2}>{c.name}</option>
             ))}
           </select>
         </label>
-        <label className="block">
+        <label className="block min-w-0 flex-1">
           <span className="label mb-1 block text-xs">Rahoitustyyppi</span>
-          <select name="fundingType" defaultValue={sp.fundingType ?? ""} className="input h-8 py-0">
+          <select name="fundingType" defaultValue={sp.fundingType ?? ""} className="input h-8 w-full max-w-full py-0">
             <option value="">Kaikki</option>
             {FUNDING_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -108,9 +108,9 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
           {overview.byCountry
             .filter((c) => c.funderCountryCode)
             .map((c) => (
-              <li key={c.funderCountryCode} className="flex items-center justify-between py-2 text-sm">
+              <li key={c.funderCountryCode} className="flex flex-wrap items-center justify-between gap-x-2 py-2 text-sm">
                 <span>{countryName.get(c.funderCountryCode!) ?? c.funderCountryCode}</span>
-                <span className="tabular-nums text-ink-500">
+                <span className="shrink-0 tabular-nums text-ink-500">
                   {formatEur(Number(c._sum.amount ?? 0))} · {c._count._all} virtaa
                 </span>
               </li>
@@ -141,8 +141,8 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
           {flows.length === 0 && <li className="py-3 text-sm text-ink-500">Ei tuloksia näillä suodattimilla.</li>}
           {flows.map((f) => (
             <li key={f.id} id={`flow-${f.id}`} className="py-3 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="min-w-0">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <span className="min-w-0 break-words">
                   <Link href={entityUrlFor(f.payerEntity.id, f.payerEntity.type, f.payerEntity.canonicalName)} className="font-medium text-accent hover:underline">
                     {f.payerEntity.canonicalName}
                   </Link>
@@ -152,9 +152,9 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
                     {f.recipientEntity.canonicalName}
                   </Link>
                 </span>
-                <span className="tabular-nums font-semibold">{formatEur(Number(f.amount))} {f.currency}</span>
+                <span className="shrink-0 tabular-nums font-semibold">{formatEur(Number(f.amount))} {f.currency}</span>
               </div>
-              <p className="mt-0.5 text-[11px] text-ink-500">
+              <p className="mt-0.5 break-words text-[11px] text-ink-500">
                 {f.fundingType ?? f.flowType}
                 {f.rawFundingType ? ` (${f.rawFundingType})` : ""}
                 {f.funderCountryCode ? ` · ${countryName.get(f.funderCountryCode) ?? f.funderCountryCode}` : ""}
@@ -166,7 +166,7 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
                   <summary className="cursor-pointer text-accent">Todisteet ({f.evidence.length})</summary>
                   <ul className="mt-1 space-y-1 pl-3">
                     {f.evidence.map((e) => (
-                      <li key={e.id} className="text-ink-500">
+                      <li key={e.id} className="break-words text-ink-500">
                         <a href={e.source.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
                           {e.source.sourceName}
                         </a>{" "}
@@ -191,15 +191,15 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
           {overview.topRecipients.map((r) => {
             const e = recipientName.get(r.recipientEntityId);
             return (
-              <li key={r.recipientEntityId} className="flex items-center justify-between py-2 text-sm">
-                <span>
+              <li key={r.recipientEntityId} className="flex flex-wrap items-center justify-between gap-x-2 py-2 text-sm">
+                <span className="min-w-0 break-words">
                   {e ? (
                     <Link href={entityUrlFor(e.id, e.type, e.canonicalName)} className="text-accent hover:underline">{e.canonicalName}</Link>
                   ) : (
                     r.recipientEntityId.slice(0, 8)
                   )}
                 </span>
-                <span className="tabular-nums text-ink-500">{formatEur(Number(r._sum.amount ?? 0))}</span>
+                <span className="shrink-0 tabular-nums text-ink-500">{formatEur(Number(r._sum.amount ?? 0))}</span>
               </li>
             );
           })}

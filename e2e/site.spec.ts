@@ -85,7 +85,7 @@ test.describe("money page", () => {
 });
 
 test.describe("static/public pages", () => {
-  for (const path of ["/explore", "/changes", "/map", "/methodology", "/sources", "/about", "/api", "/decisions", "/compare", "/investigate", "/corrections", "/foreign"]) {
+  for (const path of ["/explore", "/changes", "/map", "/methodology", "/sources", "/about", "/api", "/decisions", "/compare", "/investigate", "/corrections", "/foreign", "/analytics"]) {
     test(`${path} loads without errors`, async ({ page }) => {
       const errors: string[] = [];
       page.on("console", (m) => m.type() === "error" && errors.push(m.text()));

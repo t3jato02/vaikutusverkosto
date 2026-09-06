@@ -250,6 +250,26 @@ await (async () => {
       if (foreignFlowToPerson) throw new Error(`foreign funding flows terminating on a PERSON: ${foreignFlowToPerson}`);
       return "unique external record ids, no orphan evidence, no foreign flow to a person";
     });
+
+    // Sprint C3 — year semantics, ownership, analytics provenance (Phase 35).
+    const badPeriod = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "FinancialFlow"
+       WHERE ("periodStart" IS NOT NULL AND "periodEnd" IS NOT NULL AND "periodEnd" < "periodStart")
+          OR ("periodYear" IS NOT NULL AND ("periodYear" < 1990 OR "periodYear" > 2035))`));
+    const badOwnershipPct = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "relationshipType" IN ('OWNS','SHAREHOLDER_OF','BENEFICIAL_OWNER_OF')
+         AND "percentage" IS NOT NULL AND ("percentage" < 0 OR "percentage" > 100)`));
+    const analyticsNoProvenance = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "NetworkAnalytics"
+       WHERE "scope" IS NULL OR "scope" = '' OR "algorithmVersion" IS NULL OR "algorithmVersion" = ''
+          OR "graphMaxUpdatedAt" IS NULL`));
+    step("year / ownership / analytics-provenance integrity", () => {
+      if (badPeriod) throw new Error(`invalid period window or out-of-range periodYear: ${badPeriod}`);
+      if (badOwnershipPct) throw new Error(`ownership percentages outside [0,100]: ${badOwnershipPct}`);
+      if (analyticsNoProvenance) throw new Error(`NetworkAnalytics rows without scope/version/graph timestamp: ${analyticsNoProvenance}`);
+      return "valid period semantics, ownership % in range, analytics results carry scope + version";
+    });
   } finally {
     await db.$disconnect();
   }
