@@ -146,11 +146,11 @@ const REL_PHRASE_FI: Partial<Record<RelationshipType, DirectionalPhrase>> = {
   CANDIDATE_OF: { out: "Ehdokas", in: "Ehdokas" },
   SITS_IN: { out: "Istuu", in: "Kokoonpanossa" },
   EDUCATED_AT: { out: "Opiskellut", in: "Opiskellut täällä" },
-  REGISTERED_LOBBY_ORGANIZATION: { out: "Rekisteröity edunvalvoja", in: "Rekisteröity edunvalvoja" },
-  REPRESENTS_INTERESTS_OF: { out: "Edustaa etuja", in: "Edunvalvonnan kohde" },
-  CLIENT_OF: { out: "Asiakas", in: "Palveluntarjoaja" },
-  DECLARED_EU_INTEREST: { out: "Ilmoittanut EU-intressin", in: "EU-intressin kohde" },
-  ACCREDITED_REPRESENTATIVE_OF: { out: "Akkreditoitu edustaja", in: "Edustettu" },
+  REGISTERED_LOBBY_ORGANIZATION: { out: "Rekisteröity avoimuusrekisteriin", in: "Rekisteröity avoimuusrekisteriin" },
+  REPRESENTS_INTERESTS_OF: { out: "Edustaa tahon etuja", in: "Edunvalvonnan kohde" },
+  CLIENT_OF: { out: "Asiakassuhde", in: "Asiakassuhde" },
+  DECLARED_EU_INTEREST: { out: "Ilmoitettu EU-etuyhteys", in: "Ilmoitettu EU-etuyhteys" },
+  ACCREDITED_REPRESENTATIVE_OF: { out: "Akkreditoitu edustaja", in: "Edustettu taho" },
 };
 
 /**
@@ -171,6 +171,22 @@ export function relationshipPhrase(
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/^./, (c) => c.toUpperCase());
+}
+
+// ---------------------------------------------------------------- agent run status
+
+const RUN_STATUS_FI: Record<string, string> = {
+  SUCCESS: "Onnistui",
+  PARTIAL: "Osittain",
+  FAILED: "Epäonnistui",
+  SKIPPED: "Ohitettu",
+  RUNNING: "Käynnissä",
+};
+
+/** Public label for an ingestion run status; never leaks the raw enum. */
+export function runStatusLabel(status: string, locale: Locale = "fi"): string {
+  void locale;
+  return RUN_STATUS_FI[status] ?? status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 // ---------------------------------------------------------------- confidence

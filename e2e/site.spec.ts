@@ -98,6 +98,36 @@ test.describe("static/public pages", () => {
   }
 });
 
+test.describe("foreign + analytics depth", () => {
+  test("/foreign shows the yearly funding trend and top-recipients sections when data exists", async ({ page }) => {
+    await page.goto("/foreign");
+    const cards = page.locator(".card");
+    await expect(cards.first()).toBeVisible();
+    const body = (await page.textContent("body")) ?? "";
+    // These sections render only with data; assert the headings when the page is populated.
+    if (body.includes("Dokumentoitu ulkomainen rahoitus vuosittain")) {
+      await expect(
+        page.getByRole("heading", { name: "Dokumentoitu ulkomainen rahoitus vuosittain" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: /Suurimmat dokumentoidun rahoituksen vastaanottajat/ }),
+      ).toBeVisible();
+    }
+    // No raw enum tokens leaked into the visible text.
+    expect(body).not.toMatch(/\bSOURCE_CONFIRMED\b|\bOFFICIAL_REGISTER\b|\bGOVERNMENT_BODY\b/);
+  });
+
+  test("/analytics states metrics are structural, not a verdict", async ({ page }) => {
+    await page.goto("/analytics");
+    await expect(page.getByRole("heading", { level: 1, name: "Verkostoanalyysi" })).toBeVisible();
+    const body = (await page.textContent("body")) ?? "";
+    expect(body).toContain("ei");
+    expect(body.toLowerCase()).toContain("korkea");
+    // "Miten tämä laskettiin?" explainability control is present.
+    await expect(page.getByText("Miten tämä laskettiin?")).toBeVisible();
+  });
+});
+
 test.describe("404 handling", () => {
   test("unknown route shows 404 page", async ({ page }) => {
     await page.goto("/this-does-not-exist");

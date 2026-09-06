@@ -22,6 +22,7 @@ import Avatar from "@/components/Avatar";
 import { ConfidenceBadge } from "@/components/badges";
 import { sourceTypeLabel } from "@/components/SourceLink";
 import GraphView from "@/components/GraphView";
+import EntityNetworkPosition from "@/components/EntityNetworkPosition";
 
 export const dynamic = "force-dynamic";
 
@@ -179,6 +180,8 @@ export default async function PersonPage({ params }: { params: Promise<{ slug: s
           <MetricCard label="Tiedon luotettavuus" value={dc.value.toFixed(2)} title={dc.interpretation} />
         </div>
       </section>
+
+      <EntityNetworkPosition entityId={entity.id} />
 
       {/* network */}
       <section aria-label="Verkosto">

@@ -36,6 +36,16 @@ const EC_REF = {
   externalId: { provider: "eu-fts", identifier: "european-commission" },
 } as const;
 
+// The sovereign state itself as a beneficiary (e.g. "Republic of Finland",
+// "Suomen valtio"). Deterministic match on the official name field — never
+// inferred. FTS lists these as a plain beneficiary with no useful type, which
+// otherwise falls through to ORGANIZATION / OTHER.
+const SOVEREIGN_STATE_RE =
+  /(^|\W)(republic of finland|republique de finlande|suomen tasavalta|suomen valtio)(\W|$)/i;
+export function isSovereignFinnishState(name: string): boolean {
+  return SOVEREIGN_STATE_RE.test(name);
+}
+
 function categoryOf(benefType: string, ngo: string):
   | "GOVERNMENT" | "GOVERNMENT_AGENCY" | "COMPANY" | "FOUNDATION" | "NGO" | "UNIVERSITY" | "OTHER" {
   const b = benefType.toLowerCase();
@@ -245,12 +255,13 @@ export const euFtsAdapter: SourceAdapter = {
     if (!r || !(r.amount > 0) || !r.name) return [];
     const ytunnus = vatToYtunnus(r.vat);
     const { ft, flow } = fundingTypeOf(r.contractType, r.expenseType);
+    const sovereign = isSovereignFinnishState(r.name);
     const target = {
-      type: EntityType.ORGANIZATION as EntityType,
+      type: (sovereign ? EntityType.GOVERNMENT_BODY : EntityType.ORGANIZATION) as EntityType,
       name: r.name,
       jurisdiction: "FI",
       countryCode: "FI",
-      entityCategory: categoryOf(r.benefType, r.ngo),
+      entityCategory: sovereign ? ("GOVERNMENT" as const) : categoryOf(r.benefType, r.ngo),
       municipality: r.city ? r.city.replace(/\s+[A-Z]{2}$/, "").trim() : null,
       ...(ytunnus ? { externalId: { provider: "ytj", identifier: ytunnus } } : {}),
     };

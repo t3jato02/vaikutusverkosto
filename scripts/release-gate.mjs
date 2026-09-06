@@ -270,6 +270,29 @@ await (async () => {
       if (analyticsNoProvenance) throw new Error(`NetworkAnalytics rows without scope/version/graph timestamp: ${analyticsNoProvenance}`);
       return "valid period semantics, ownership % in range, analytics results carry scope + version";
     });
+
+    // Sprint C4 — transparency register + ownership relationship integrity.
+    const trNoEvidence = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship" r
+       WHERE r."relationshipType" IN ('REGISTERED_LOBBY_ORGANIZATION','REPRESENTS_INTERESTS_OF',
+             'CLIENT_OF','DECLARED_EU_INTEREST','ACCREDITED_REPRESENTATIVE_OF')
+         AND r."verificationState" = 'PUBLISHED'
+         AND NOT EXISTS (SELECT 1 FROM "Evidence" e WHERE e."relationshipId" = r.id)`));
+    const ownsNoEvidence = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship" r
+       WHERE r."relationshipType" IN ('OWNS','SHAREHOLDER_OF','BENEFICIAL_OWNER_OF')
+         AND r."verificationState" = 'PUBLISHED'
+         AND NOT EXISTS (SELECT 1 FROM "Evidence" e WHERE e."relationshipId" = r.id)`));
+    const ownsHistoricalAsCurrent = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "relationshipType" IN ('OWNS','SHAREHOLDER_OF','BENEFICIAL_OWNER_OF')
+         AND "temporalState" = 'CURRENT' AND "endDate" IS NOT NULL AND "endDate" < CURRENT_DATE`));
+    step("transparency + ownership relationship integrity", () => {
+      if (trNoEvidence) throw new Error(`published transparency-register relationships without evidence: ${trNoEvidence}`);
+      if (ownsNoEvidence) throw new Error(`published ownership relationships without evidence: ${ownsNoEvidence}`);
+      if (ownsHistoricalAsCurrent) throw new Error(`ended ownership shown as current: ${ownsHistoricalAsCurrent}`);
+      return "transparency + ownership relationships evidenced; no ended ownership shown as current";
+    });
   } finally {
     await db.$disconnect();
   }
