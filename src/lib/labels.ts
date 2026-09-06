@@ -266,25 +266,46 @@ export function changeEventSentence(input: {
 /** Sentence for a group of same-run, same-entity, same-type changes. */
 export function changeEventGroupSentence(input: {
   eventType: ChangeEventType;
-  entityName?: string | null;
   count: number;
+  /** the relationship type shared by every item in the group, if any */
+  relationshipType?: RelationshipType | null;
 }): string {
-  const subject = input.entityName ?? "Tuntematon toimija";
   const n = input.count;
+  // A shared relationship type gives a more specific noun ("5 uutta jäsenyyttä").
+  const noun = (() => {
+    switch (input.relationshipType) {
+      case "MEMBER_OF":
+      case "SITS_IN":
+        return ["uutta jäsenyyttä", "päättynyttä jäsenyyttä"];
+      case "BOARD_MEMBER_OF":
+      case "CHAIRS":
+        return ["uutta hallitusroolia", "päättynyttä hallitusroolia"];
+      case "EDUCATED_AT":
+        return ["uutta koulutustietoa", "poistettua koulutustietoa"];
+      case "EMPLOYED_BY":
+        return ["uutta työsuhdetta", "päättynyttä työsuhdetta"];
+      default:
+        return ["uutta yhteyttä", "päättynyttä yhteyttä"];
+    }
+  })();
   switch (input.eventType) {
     case "RELATIONSHIP_ADDED":
-      return `${subject} — ${n} uutta yhteyttä`;
+      return `${n} ${noun[0]}`;
     case "RELATIONSHIP_ENDED":
-      return `${subject} — ${n} päättynyttä yhteyttä`;
+      return `${n} ${noun[1]}`;
     case "NEW_APPOINTMENT":
-      return `${subject} — ${n} uutta nimitystä`;
+      return `${n} uutta nimitystä`;
     case "NEW_GRANT":
-      return `${subject} — ${n} uutta avustusta`;
+      return `${n} uutta rahoituserää`;
+    case "NEW_CONTRACT":
+      return `${n} uutta sopimusta`;
     case "NEW_VOTE":
-      return `${subject} — ${n} uutta äänestystä`;
+      return `${n} uutta äänestystä`;
     case "SOURCE_ADDED":
-      return `${subject} — ${n} uutta lähdettä`;
+      return `${n} uutta lähdettä`;
+    case "ENTITY_UPDATED":
+      return `tiedot päivittyivät ${n} kertaa`;
     default:
-      return `${subject} — ${n} muutosta`;
+      return `${n} muutosta`;
   }
 }

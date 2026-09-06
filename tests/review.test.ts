@@ -29,7 +29,7 @@ describe.skipIf(!hasDb)("human review actions (Phase 12)", () => {
   afterAll(async () => {
     await db.reviewAction.deleteMany({ where: { note: TAG } });
     await db.relationship.deleteMany({ where: { sourceEntity: { canonicalName: { startsWith: TAG } } } });
-    await db.changeLog.deleteMany({ where: { description: { contains: "Tarkastajan toimenpide" }, entity: { canonicalName: { startsWith: TAG } } } });
+    await db.changeLog.deleteMany({ where: { description: { startsWith: "review:" }, entity: { canonicalName: { startsWith: TAG } } } });
     await db.entity.deleteMany({ where: { canonicalName: { startsWith: TAG } } });
     await db.entityResolutionCandidate.deleteMany({ where: { refName: `${TAG}-cand` } });
   });

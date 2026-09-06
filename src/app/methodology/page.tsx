@@ -6,8 +6,8 @@ export default function MethodologyPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-10">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">Menetelmät ja periaatteet</h1>
-        <p className="mt-2 text-sm leading-relaxed text-ink-500">
+        <h1 className="text-page-title">Menetelmät ja periaatteet</h1>
+        <p className="mt-2 text-sm leading-relaxed text-muted">
           Vaikutusverkosto on <strong>lähdeperustainen</strong> selvitysalusta. Verkosto ei ole
           tuomio — <strong>lähteet ovat todisteet</strong>. Tämä sivu kertoo tarkasti, mitä
           tiedot tarkoittavat, miten ne on kerätty ja miten mittarit lasketaan.
@@ -24,13 +24,16 @@ export default function MethodologyPage() {
       </Section>
 
       <Section id="verification" title="Vahvistustilat">
+        <p className="text-muted">
+          Käyttöliittymässä näkyy ihmisluettava tila; suluissa on tietomallin tekninen tunniste.
+        </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li><strong>AUTO_DETECTED</strong> — agentti/jäsennin löysi yhteyden, mutta sitä ei ole vielä riittävästi vahvistettu. Ei näytetä tavallisena vahvistettuna yhteytenä.</li>
-          <li><strong>SOURCE_CONFIRMED</strong> — alkuperäinen tai riittävän vahva julkinen lähde tukee juuri kyseistä väitettä.</li>
-          <li><strong>HUMAN_VERIFIED</strong> — tarkastaja on tarkistanut lähteen ja hyväksynyt yhteyden. Agentti ei koskaan aseta tätä tilaa.</li>
-          <li><strong>DISPUTED</strong> — yhteydestä on uskottava ristiriita tai korjauspyyntö. Näytetään selvästi merkittynä.</li>
-          <li><strong>REJECTED</strong> — automaattinen havainto todettiin vääräksi. Ei julkisessa graafissa.</li>
-          <li><strong>STALE</strong> — tieto oli aiemmin pätevä, mutta nykytila on todennäköisesti muuttunut. Historiaa ei poisteta.</li>
+          <li><strong>Automaattisesti havaittu</strong> <Code>AUTO_DETECTED</Code> — agentti tai jäsennin löysi yhteyden, mutta sitä ei ole vielä riittävästi vahvistettu. Ei näytetä tavallisena vahvistettuna yhteytenä.</li>
+          <li><strong>Vahvistettu lähteestä</strong> <Code>SOURCE_CONFIRMED</Code> — alkuperäinen tai riittävän vahva julkinen lähde tukee juuri kyseistä väitettä.</li>
+          <li><strong>Ihmisen tarkistama</strong> <Code>HUMAN_VERIFIED</Code> — tarkastaja on lukenut lähteen ja hyväksynyt yhteyden. Agentti ei koskaan aseta tätä tilaa.</li>
+          <li><strong>Kiistanalainen</strong> <Code>DISPUTED</Code> — yhteydestä on uskottava ristiriita tai korjauspyyntö. Näytetään selvästi merkittynä.</li>
+          <li><strong>Hylätty</strong> <Code>REJECTED</Code> — automaattinen havainto todettiin virheelliseksi. Ei julkisessa graafissa.</li>
+          <li><strong>Vanhentunut</strong> <Code>STALE</Code> — tieto oli aiemmin pätevä, mutta nykytila on todennäköisesti muuttunut. Historiaa ei poisteta.</li>
         </ul>
         <p className="mt-2">
           Ei-deterministiset tai toissijaiset lähteet (mediakooste, järjestön raportti, semanttinen
@@ -43,8 +46,9 @@ export default function MethodologyPage() {
         <p>
           Jokainen yhteys on ajallinen. Jos päättymispäivä on menneisyydessä tai tehtävä on
           merkitty päättyneeksi, yhteyttä <strong>ei näytetä nykyisenä</strong>. Avoin, lähteen
-          aktiiviseksi vahvistama rooli on <strong>CURRENT</strong>; pelkän historiadokumentin
-          varassa oleva yhteys on <strong>HISTORICAL</strong> tai <strong>UNKNOWN_PERIOD</strong>,
+          aktiiviseksi vahvistama rooli on <strong>Nykyinen</strong> <Code>CURRENT</Code>; pelkän
+          historiadokumentin varassa oleva yhteys on <strong>Historiallinen</strong>{" "}
+          <Code>HISTORICAL</Code> tai <strong>Ajankohta epävarma</strong> <Code>UNKNOWN_PERIOD</Code>,
           ei automaattisesti nykyinen. Historiallista yhteyttä ei poisteta.
         </p>
       </Section>
@@ -142,7 +146,8 @@ export default function MethodologyPage() {
           Ensisijaisia lähteitä suositaan: Eduskunnan avoin data, valtion virastojen rekisterit,
           tuomioistuinten julkiset asiakirjat, yhtiö- ja yhdistysrekisterit, vaali- ja
           puoluerahoitusilmoitukset, hankintarekisterit ja viralliset vuosikertomukset. Lähteen
-          luokka merkitään (OFFICIAL_PRIMARY … SECONDARY_MEDIA) ja luottamus arvioidaan.
+          luokka merkitään (virallisesta ensisijaisesta lähteestä toissijaiseen mediaan) ja
+          luottamus arvioidaan.
         </p>
         <p>
           Ei kaavita vastoin palvelun käyttöehtoja. Jos lähteet ovat ristiriidassa, niitä ei
@@ -152,13 +157,13 @@ export default function MethodologyPage() {
 
       <Section id="confidence" title="Luottamustasot">
         <ul className="list-disc space-y-1 pl-5">
-          <li><strong>VERIFIED</strong> — virallinen ensisijainen lähde (esim. Eduskunnan rekisteri).</li>
-          <li><strong>HIGH</strong> — useita riippumattomia, hyvälaatuisia lähteitä.</li>
-          <li><strong>MEDIUM</strong> — yksittäinen hyvä lähde tai vahva epäsuora näyttö.</li>
-          <li><strong>LOW</strong> — heikko näyttö; ei välttämättä julkisteta.</li>
-          <li><strong>DISPUTED</strong> — lähteet ristiriidassa; merkitään &ldquo;tarkistettavana&rdquo;.</li>
+          <li><strong>Varmennettu</strong> <Code>VERIFIED</Code> — virallinen ensisijainen lähde (esim. Eduskunnan rekisteri).</li>
+          <li><strong>Korkea varmuus</strong> <Code>HIGH</Code> — useita riippumattomia, hyvälaatuisia lähteitä.</li>
+          <li><strong>Kohtalainen varmuus</strong> <Code>MEDIUM</Code> — yksittäinen hyvä lähde tai vahva epäsuora näyttö.</li>
+          <li><strong>Matala varmuus</strong> <Code>LOW</Code> — heikko näyttö; ei välttämättä julkisteta.</li>
+          <li><strong>Kiistanalainen</strong> <Code>DISPUTED</Code> — lähteet ristiriidassa; merkitään &ldquo;tarkistettavana&rdquo;.</li>
         </ul>
-        <p className="mt-2">Julkinen käyttöliittymä näyttää oletuksena VERIFIED/HIGH-tietoa.</p>
+        <p className="mt-2">Julkinen käyttöliittymä näyttää oletuksena varmennettua ja korkean varmuuden tietoa.</p>
       </Section>
 
       <Section id="metrics" title="Mittarit">
@@ -174,9 +179,9 @@ export default function MethodologyPage() {
           <li><strong>Tiedon luotettavuus</strong> — yhdistelmä suhteiden luottamuksesta ja lähteiden määrästä (0–1).</li>
         </ul>
         <p className="mt-2">
-          Johdetut mittarit ovat aina merkitty <strong>JOHDETTU</strong>-merkinnällä ja
-          erotetaan dokumentoiduista tosiasioista (<strong>TOSI</strong>). Korrelaatio ei ole
-          kausaliteetti — johdettuja päätelmiä ei esitetä syy-yhteytenä.
+          Johdetut mittarit merkitään aina erikseen laskennallisiksi ja erotetaan
+          dokumentoiduista, lähteeseen perustuvista tosiasioista. Korrelaatio ei ole kausaliteetti
+          — johdettuja päätelmiä ei esitetä syy-yhteytenä.
         </p>
       </Section>
 
@@ -263,11 +268,20 @@ export default function MethodologyPage() {
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return (
-    <section id={id}>
-      <h2 className="mb-2 border-b border-ink-100 pb-1 text-sm font-bold uppercase tracking-wide text-ink-900">
+    <section id={id} className="scroll-mt-20">
+      <h2 className="mb-2 border-b border-line pb-1.5 text-[15px] font-semibold tracking-tight text-ink">
         {title}
       </h2>
-      <div className="space-y-3 text-sm leading-relaxed text-ink-700">{children}</div>
+      <div className="space-y-3 text-sm leading-relaxed text-ink-700 [&_a]:underline [&_a]:decoration-accent/50 [&_a]:underline-offset-2">
+        {children}
+      </div>
     </section>
+  );
+}
+
+/** Technical enum tag shown secondary to the human label. */
+function Code({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded bg-ink-100 px-1 py-0.5 text-[11px] font-medium text-muted">{children}</code>
   );
 }
