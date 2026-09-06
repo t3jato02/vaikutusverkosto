@@ -7,6 +7,7 @@ import Avatar from "@/components/Avatar";
 import { ConfidenceBadge } from "@/components/badges";
 import RelationshipList from "@/components/RelationshipList";
 import GraphView from "@/components/GraphView";
+import EntityNetworkPosition from "@/components/EntityNetworkPosition";
 import type { Prisma } from "@prisma/client";
 
 export type OrgEntity = Prisma.EntityGetPayload<{
@@ -67,6 +68,8 @@ export default async function OrganizationProfile({ entity }: { entity: OrgEntit
           </div>
         </div>
       </section>
+
+      <EntityNetworkPosition entityId={entity.id} />
 
       <section aria-label="Verkosto">
         <h2 className="section-title mb-2">Verkosto</h2>
