@@ -289,6 +289,8 @@ async function upsertRelationship(
 
     const endChanged = (existing.endDate?.getTime() ?? null) !== (o.endDate?.getTime() ?? null);
     const confChanged = existing.confidence !== o.confidence;
+    const newPct = o.ownershipPercent ?? null;
+    const pctChanged = newPct !== null && Number(existing.percentage ?? NaN) !== newPct;
 
     // Phase 8 — source conflict: a NEW claim that an open-ended relationship has
     // ended, while another source confirmed it active recently. Don't overwrite;
@@ -315,12 +317,13 @@ async function upsertRelationship(
       return "unchanged";
     }
 
-    if (endChanged || confChanged) {
+    if (endChanged || confChanged || pctChanged) {
       await ctx.db.relationship.update({
         where: { id: existing.id },
         data: {
           endDate: o.endDate,
           confidence: o.confidence,
+          ...(pctChanged ? { percentage: newPct } : {}),
           lastVerifiedAt: new Date(),
           lastConfirmedAt: new Date(),
           observedAt: new Date(),
@@ -333,7 +336,11 @@ async function upsertRelationship(
           entityId: o.sourceEntityId,
           relationshipId: existing.id,
           sourceId: o.sourceId,
-          description: `Yhteyden päättymispäivä päivitetty: ${o.relationshipType}`,
+          description: endChanged
+            ? `Yhteyden päättymispäivä päivitetty: ${o.relationshipType}`
+            : pctChanged
+              ? `Omistusosuus päivitetty: ${o.relationshipType} (${newPct} %)`
+              : `Yhteyden varmuustaso päivitetty: ${o.relationshipType}`,
           occurredAt: new Date(),
         },
       });
