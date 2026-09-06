@@ -136,6 +136,41 @@ export default async function OrganizationProfile({ entity }: { entity: OrgEntit
           })}
         </ul>
       </section>
+
+      {profile.flows.some((f) => f.isForeign) && (
+        <section aria-label="Kansainväliset yhteydet">
+          <h2 className="card-title mb-2">KANSAINVÄLISET YHTEYDET</h2>
+          <p className="mb-2 text-[11px] text-ink-500">
+            Dokumentoitu ulkomainen rahoitus tälle organisaatiolle. Sama evidenssistandardi
+            kaikille maille.
+          </p>
+          <ul className="card divide-y divide-ink-100">
+            {profile.flows
+              .filter((f) => f.isForeign)
+              .map((f) => {
+                const out = f.payerEntityId === entity.id;
+                const other = out ? f.recipientEntity : f.payerEntity;
+                return (
+                  <li key={`fx-${f.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                    <span>
+                      <Link href={entityUrlFor(other.id, other.type, other.canonicalName)} className="font-medium text-accent hover:underline">
+                        {other.canonicalName}
+                      </Link>
+                      {f.funderCountryCode ? <span className="text-ink-400"> · {f.funderCountryCode}</span> : null}
+                      {f.fundingType ? <span className="text-ink-400"> · {f.fundingType}</span> : null}
+                    </span>
+                    <span className="flex items-center gap-3 text-xs text-ink-500">
+                      <span className="font-semibold tabular-nums text-ink-900">{formatEur(f.amount)} {f.currency}</span>
+                      {f.evidence[0]?.source && (
+                        <a href={f.evidence[0].source.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">lähde</a>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

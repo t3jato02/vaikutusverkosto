@@ -24,6 +24,7 @@
     "agent": "tsx scripts/run-agent.ts",
     "ingest:seed": "tsx scripts/seed-demo.ts",
     "registry:sync": "tsx scripts/sync-source-registry.ts",
+    "seed:countries": "tsx scripts/seed-countries.ts",
     "release:gate": "node scripts/release-gate.mjs"
   },
   "dependencies": {

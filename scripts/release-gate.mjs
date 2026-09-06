@@ -199,6 +199,32 @@ await (async () => {
       if (orphanConflict) throw new Error(`SourceConflict rows referencing a missing relationship: ${orphanConflict}`);
       return "supportingSourceCount matches distinct evidence sources; no orphan conflicts";
     });
+
+    // Sprint C — foreign funding invariants (Phase 34).
+    const badCountryCode = await n(await db.$queryRawUnsafe(
+      `SELECT (SELECT count(*) FROM "FinancialFlow"
+                 WHERE "funderCountryCode" IS NOT NULL AND "funderCountryCode" !~ '^[A-Z]{2}$')
+            + (SELECT count(*) FROM "Entity"
+                 WHERE "countryCode" IS NOT NULL AND "countryCode" !~ '^[A-Z]{2}$') AS count`));
+    const orphanProjectFlow = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "FinancialFlow" f
+       WHERE f."projectId" IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM "Project" p WHERE p.id = f."projectId")`));
+    const foreignNoEvidence = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "FinancialFlow" f
+       WHERE f."isForeign" = true AND f."verificationStatus" IN ('SOURCE_CONFIRMED','HUMAN_VERIFIED')
+         AND NOT EXISTS (SELECT 1 FROM "Evidence" e WHERE e."flowId" = f.id)`));
+    const foreignFlagWrong = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "FinancialFlow"
+       WHERE ("isForeign" = true AND (COALESCE("funderCountryCode",'FI') = 'FI'))
+          OR ("isForeign" = false AND "funderCountryCode" IS NOT NULL AND "funderCountryCode" <> 'FI')`));
+    step("foreign funding integrity", () => {
+      if (badCountryCode) throw new Error(`non-ISO-alpha2 country codes: ${badCountryCode}`);
+      if (orphanProjectFlow) throw new Error(`flows pointing at a missing project: ${orphanProjectFlow}`);
+      if (foreignNoEvidence) throw new Error(`published foreign flows without evidence: ${foreignNoEvidence}`);
+      if (foreignFlagWrong) throw new Error(`isForeign flag inconsistent with funderCountryCode: ${foreignFlagWrong}`);
+      return "valid ISO country codes, no orphan project, foreign flows evidenced, isForeign consistent";
+    });
   } finally {
     await db.$disconnect();
   }
