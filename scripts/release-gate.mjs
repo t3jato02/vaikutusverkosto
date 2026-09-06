@@ -158,6 +158,47 @@ await (async () => {
       if (dupStrongIds) throw new Error(`duplicate strong identifiers: ${dupStrongIds}`);
       return "no duplicate (provider, identifier) strong ids";
     });
+
+    // B.5 Phase 5 — temporal invariants.
+    const currentWithPastEnd = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "temporalState" = 'CURRENT' AND "endDate" IS NOT NULL AND "endDate" < CURRENT_DATE`));
+    const invertedWindow = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "startDate" IS NOT NULL AND "endDate" IS NOT NULL AND "endDate" < "startDate"`));
+    const historicalShownCurrent = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "temporalState" <> 'HISTORICAL' AND "status" = 'FORMER'`));
+    const candidateLeak = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "RelationshipCandidate"
+       WHERE status IN ('PENDING','NEEDS_REVIEW','AUTO_ACCEPTABLE') AND "publishedRelationshipId" IS NOT NULL`));
+
+    step("temporal integrity", () => {
+      if (currentWithPastEnd) throw new Error(`CURRENT relationships with a past validTo: ${currentWithPastEnd}`);
+      if (invertedWindow) throw new Error(`validTo < validFrom: ${invertedWindow}`);
+      if (historicalShownCurrent) throw new Error(`FORMER-status relationships not marked HISTORICAL: ${historicalShownCurrent}`);
+      return "no historical-as-current, valid windows, deterministic state";
+    });
+    step("candidate lane integrity", () => {
+      if (candidateLeak) throw new Error(`unresolved candidates carrying a published relationship id: ${candidateLeak}`);
+      return "no pending candidate published as a fact";
+    });
+
+    // B.5 Phase 7/8.
+    const badSupportCount = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship" r
+       WHERE r."supportingSourceCount" < 1
+          OR r."supportingSourceCount" > GREATEST(1, (
+            SELECT count(DISTINCT e."sourceId") FROM "Evidence" e WHERE e."relationshipId" = r.id))`));
+    const orphanConflict = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "SourceConflict" c
+       WHERE c."relationshipId" IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM "Relationship" r WHERE r.id = c."relationshipId")`));
+    step("corroboration integrity", () => {
+      if (badSupportCount) throw new Error(`supportingSourceCount inconsistent with distinct evidence sources: ${badSupportCount}`);
+      if (orphanConflict) throw new Error(`SourceConflict rows referencing a missing relationship: ${orphanConflict}`);
+      return "supportingSourceCount matches distinct evidence sources; no orphan conflicts";
+    });
   } finally {
     await db.$disconnect();
   }

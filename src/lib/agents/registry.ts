@@ -4,6 +4,7 @@ import type { SourceAdapter } from "./types";
 import { eduskuntaAdapter } from "./eduskunta";
 import { procurementAdapter } from "./procurement";
 import { prhAdapter } from "./prh";
+import { sidonnaisuudetAdapter } from "./sidonnaisuudet";
 
 const REGISTRY: Record<string, SourceAdapter> = {};
 
@@ -23,6 +24,7 @@ export function listAdapters(): SourceAdapter[] {
 register(eduskuntaAdapter);
 register(procurementAdapter);
 register(prhAdapter);
+register(sidonnaisuudetAdapter);
 
 export const SCHEDULES: Record<string, string> = {
   daily: "0 4 * * *", // 04:00 UTC

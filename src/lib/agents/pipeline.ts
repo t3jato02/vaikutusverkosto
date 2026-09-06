@@ -121,7 +121,7 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
     sourceType: adapter.sourceType,
   });
 
-  const stats = { scanned: 0, proposed: 0, created: 0, updated: 0, rejected: 0, errors: 0 };
+  const stats = { scanned: 0, proposed: 0, created: 0, updated: 0, rejected: 0, errors: 0, candidates: 0 };
   const docStats = { checked: 0, new: 0, changed: 0, unchanged: 0 };
   const ctx: RunContext = {
     runId: run.id,
@@ -209,10 +209,17 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
             sourceType: adapter.sourceType,
             sourceName: adapter.name,
             publisher: adapter.publisher,
+            extractionMethod: fact.extractionMethod,
+            extractorVersion: fact.extractorVersion,
+            sourceDocumentId: cd.documentId,
+            assertedCurrent: fact.assertedCurrent,
           };
           const result = await publishVerifiedFact(ctx, proposed);
           if (result.action === "rejected") {
             ctx.log(`rejected: ${result.reason}`);
+          } else if (result.action === "candidate") {
+            stats.candidates++;
+            ctx.log(`candidate: ${result.candidateId}`);
           } else if (adapter.onFactPublished) {
             await adapter.onFactPublished(ctx, fact, result.entityIds);
           }

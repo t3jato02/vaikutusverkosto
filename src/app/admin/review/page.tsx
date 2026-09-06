@@ -42,8 +42,13 @@ function ActionForm({
 }
 
 export default async function AdminReviewPage() {
-  const [candidates, autoRels, disputed, corrections, audit] = await Promise.all([
+  const [candidates, relCandidates, autoRels, disputed, corrections, audit] = await Promise.all([
     db.entityResolutionCandidate.findMany({ where: { status: "PENDING" }, orderBy: { createdAt: "asc" }, take: 50 }),
+    db.relationshipCandidate.findMany({
+      where: { status: { in: ["PENDING", "NEEDS_REVIEW", "AUTO_ACCEPTABLE"] } },
+      orderBy: { createdAt: "asc" },
+      take: 50,
+    }),
     db.relationship.findMany({
       where: { verificationStatus: "AUTO_DETECTED" },
       orderBy: { createdAt: "desc" },
@@ -70,6 +75,7 @@ export default async function AdminReviewPage() {
     }),
     db.reviewAction.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
   ]);
+  const conflicts = await db.sourceConflict.findMany({ where: { status: "OPEN" }, orderBy: { createdAt: "asc" }, take: 30 });
 
   return (
     <div className="space-y-8">
@@ -96,6 +102,45 @@ export default async function AdminReviewPage() {
                 actions={[
                   { value: "resolve", label: "Ratkaise valittuun" },
                   { value: "dismiss", label: "Hylkää" },
+                ]}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section aria-label="Suhde-ehdokkaat">
+        <h2 className="card-title mb-2">SUHDE-EHDOKKAAT ({relCandidates.length})</h2>
+        <p className="mb-2 text-[11px] text-ink-500">
+          Ei-deterministiset tai toissijaiset lähteet päätyvät ehdokkaiksi eivätkä suoraan
+          julkaistuiksi suhteiksi. Hyväksyntä luo suhteen tilassa HUMAN_VERIFIED.
+        </p>
+        <ul className="card divide-y divide-ink-100">
+          {relCandidates.length === 0 && <li className="py-3 text-sm text-ink-500">Ei ehdokkaita.</li>}
+          {relCandidates.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
+              <div className="min-w-0">
+                <span className="font-semibold text-ink-900">
+                  {(c.sourceEntityRef as { name?: string })?.name ?? c.resolvedSourceEntityId?.slice(0, 8)}
+                </span>
+                <span className="text-ink-500"> {relationshipLabel(c.relationshipType)} </span>
+                <span className="font-semibold text-ink-900">
+                  {(c.targetEntityRef as { name?: string })?.name ?? c.resolvedTargetEntityId?.slice(0, 8)}
+                </span>
+                <p className="text-ink-400">
+                  {c.extractionMethod}
+                  {c.extractorVersion ? ` ${c.extractorVersion}` : ""} · luottamus {c.confidenceScore ?? "?"} ·{" "}
+                  <a href={c.evidenceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">lähde</a> ·{" "}
+                  {c.status}
+                  {!c.resolvedSourceEntityId || !c.resolvedTargetEntityId ? " · entiteetit ratkaisematta" : ""}
+                </p>
+              </div>
+              <ActionForm
+                target="relationship_candidate"
+                id={c.id}
+                actions={[
+                  { value: "approve", label: "Hyväksy → HUMAN_VERIFIED" },
+                  { value: "reject", label: "Hylkää" },
                 ]}
               />
             </li>
@@ -155,6 +200,32 @@ export default async function AdminReviewPage() {
                     { value: "approve", label: "Vahvista" },
                     { value: "reject", label: "Hylkää" },
                     { value: "stale", label: "Vanhentunut" },
+                  ]}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {conflicts.length > 0 && (
+        <section aria-label="Lähderistiriidat">
+          <h2 className="card-title mb-2">LÄHDERISTIRIIDAT ({conflicts.length})</h2>
+          <ul className="card divide-y divide-ink-100">
+            {conflicts.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
+                <div className="min-w-0">
+                  <span className="font-semibold text-ink-900">{c.kind}</span>
+                  <p className="text-ink-400">
+                    A: {(c.claimA as { text?: string })?.text} · B: {(c.claimB as { text?: string })?.text}
+                  </p>
+                </div>
+                <ActionForm
+                  target="source_conflict"
+                  id={c.id}
+                  actions={[
+                    { value: "resolve", label: "Ratkaistu" },
+                    { value: "dismiss", label: "Ei ristiriitaa" },
                   ]}
                 />
               </li>

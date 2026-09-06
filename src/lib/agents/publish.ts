@@ -4,14 +4,17 @@
 // Direct prisma.relationship.create / financialFlow.create inside agents is forbidden
 // by design; adapters must route writes through this module.
 
-import type { PrismaClient, SourceType, RelationshipType, FlowType, Confidence } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, Confidence, EntityStatus } from "@prisma/client";
 import type { RunContext, ProposedFact } from "./types";
 import { resolveEntity } from "./entityResolution";
 import { confidenceToScore, deriveAgentStatus } from "@/lib/verification";
+import { deriveTemporalState } from "@/lib/temporal";
+import { recordRelationshipCandidate } from "./candidates";
 
 export interface PublicationResult {
-  action: "created" | "updated" | "unchanged" | "rejected";
+  action: "created" | "updated" | "unchanged" | "rejected" | "candidate";
   reason?: string;
+  candidateId?: string;
   entityIds: { source: string | null; target: string | null };
 }
 
@@ -117,6 +120,22 @@ export async function publishVerifiedFact(
   });
 
   if (fact.kind === "relationship") {
+    // Candidate lane: only deterministic official facts publish directly.
+    // LLM/semantic extraction and non-official sources are parked.
+    const method = fact.extractionMethod ?? "deterministic-parser";
+    const wouldConfirm = deriveAgentStatus({ sourceType: fact.sourceType, confidence: fact.confidence }) === "SOURCE_CONFIRMED";
+    // Only a deterministic parse of a structured official field auto-publishes.
+    // Any interpretation of free text (rule/llm) or a weaker source → review.
+    if (method !== "deterministic-parser" || !wouldConfirm) {
+      const { candidateId } = await recordRelationshipCandidate(db, {
+        fact,
+        resolvedSourceEntityId: src.entityId,
+        resolvedTargetEntityId: tgt.entityId,
+        agentRunId: ctx.runId,
+      });
+      return { action: "candidate", candidateId, entityIds: { source: src.entityId, target: tgt.entityId } };
+    }
+
     const result = await upsertRelationship(ctx, {
       sourceEntityId: src.entityId,
       targetEntityId: tgt.entityId,
@@ -124,6 +143,7 @@ export async function publishVerifiedFact(
       role: fact.role ?? null,
       startDate: fact.startDate ?? null,
       endDate: fact.endDate ?? null,
+      assertedCurrent: fact.assertedCurrent,
       confidence: fact.confidence,
       sourceType: fact.sourceType,
       sourceId: evidenceSource.id,
@@ -164,12 +184,15 @@ async function upsertRelationship(
     role: string | null;
     startDate: Date | null;
     endDate: Date | null;
+    assertedCurrent?: boolean;
     confidence: Confidence;
     sourceType: SourceType;
     sourceId: string;
     createdBy: string;
   },
 ): Promise<"created" | "updated" | "unchanged"> {
+  const temporalOf = (status: EntityStatus) =>
+    deriveTemporalState({ validFrom: o.startDate, validTo: o.endDate, status, assertedCurrent: o.assertedCurrent });
   const existing = await ctx.db.relationship.findFirst({
     where: {
       sourceEntityId: o.sourceEntityId,
@@ -180,12 +203,66 @@ async function upsertRelationship(
     },
   });
   if (existing) {
+    // Phase 7 — cross-source corroboration: attach this source's evidence to the
+    // SAME canonical edge (never a second graph edge). Count distinct sources.
+    const already = await ctx.db.evidence.findFirst({
+      where: { relationshipId: existing.id, sourceId: o.sourceId },
+      select: { id: true },
+    });
+    if (!already) {
+      await ctx.db.evidence.create({
+        data: { relationshipId: existing.id, sourceId: o.sourceId, confidence: o.confidence },
+      });
+      const distinct = await ctx.db.evidence.findMany({
+        where: { relationshipId: existing.id },
+        select: { sourceId: true },
+        distinct: ["sourceId"],
+      });
+      await ctx.db.relationship.update({
+        where: { id: existing.id },
+        data: { supportingSourceCount: distinct.length, lastConfirmedAt: new Date(), observedAt: new Date() },
+      });
+    }
+
     const endChanged = (existing.endDate?.getTime() ?? null) !== (o.endDate?.getTime() ?? null);
     const confChanged = existing.confidence !== o.confidence;
+
+    // Phase 8 — source conflict: a NEW claim that an open-ended relationship has
+    // ended, while another source confirmed it active recently. Don't overwrite;
+    // park a SourceConflict for review.
+    const CONFIRM_WINDOW_MS = 120 * 24 * 60 * 60 * 1000;
+    if (
+      existing.endDate === null &&
+      o.endDate !== null &&
+      existing.lastConfirmedAt &&
+      Date.now() - existing.lastConfirmedAt.getTime() < CONFIRM_WINDOW_MS &&
+      !already
+    ) {
+      await ctx.db.sourceConflict.create({
+        data: {
+          relationshipId: existing.id,
+          entityId: o.sourceEntityId,
+          kind: "ended_vs_active",
+          claimA: { text: "relationship still active (open-ended)", confirmedAt: existing.lastConfirmedAt.toISOString() },
+          claimB: { text: `relationship ended ${o.endDate.toISOString().slice(0, 10)}`, sourceId: o.sourceId, sourceType: o.sourceType },
+        },
+      });
+      ctx.log(`source conflict parked for relationship ${existing.id} (ended vs active)`);
+      ctx.stats.updated++;
+      return "unchanged";
+    }
+
     if (endChanged || confChanged) {
       await ctx.db.relationship.update({
         where: { id: existing.id },
-        data: { endDate: o.endDate, confidence: o.confidence, lastVerifiedAt: new Date() },
+        data: {
+          endDate: o.endDate,
+          confidence: o.confidence,
+          lastVerifiedAt: new Date(),
+          lastConfirmedAt: new Date(),
+          observedAt: new Date(),
+          temporalState: temporalOf(existing.status),
+        },
       });
       await ctx.db.changeLog.create({
         data: {
@@ -200,6 +277,11 @@ async function upsertRelationship(
       ctx.stats.updated++;
       return "updated";
     }
+    // No material change — but a source just re-confirmed the relationship holds.
+    await ctx.db.relationship.update({
+      where: { id: existing.id },
+      data: { lastConfirmedAt: new Date(), observedAt: new Date() },
+    });
     ctx.stats.updated++;
     return "unchanged";
   }
@@ -213,6 +295,9 @@ async function upsertRelationship(
       role: o.role,
       startDate: o.startDate,
       endDate: o.endDate,
+      observedAt: new Date(),
+      lastConfirmedAt: new Date(),
+      temporalState: temporalOf("ACTIVE"),
       confidence: o.confidence,
       confidenceScore: confidenceToScore(o.confidence),
       verificationState: "PUBLISHED",
