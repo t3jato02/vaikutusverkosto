@@ -4,14 +4,17 @@
 // Direct prisma.relationship.create / financialFlow.create inside agents is forbidden
 // by design; adapters must route writes through this module.
 
-import type { PrismaClient, SourceType, RelationshipType, FlowType, Confidence } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, Confidence, EntityStatus } from "@prisma/client";
 import type { RunContext, ProposedFact } from "./types";
 import { resolveEntity } from "./entityResolution";
 import { confidenceToScore, deriveAgentStatus } from "@/lib/verification";
+import { deriveTemporalState } from "@/lib/temporal";
+import { recordRelationshipCandidate } from "./candidates";
 
 export interface PublicationResult {
-  action: "created" | "updated" | "unchanged" | "rejected";
+  action: "created" | "updated" | "unchanged" | "rejected" | "candidate";
   reason?: string;
+  candidateId?: string;
   entityIds: { source: string | null; target: string | null };
 }
 
@@ -117,6 +120,20 @@ export async function publishVerifiedFact(
   });
 
   if (fact.kind === "relationship") {
+    // Candidate lane: only deterministic official facts publish directly.
+    // LLM/semantic extraction and non-official sources are parked.
+    const method = fact.extractionMethod ?? "deterministic-parser";
+    const wouldConfirm = deriveAgentStatus({ sourceType: fact.sourceType, confidence: fact.confidence }) === "SOURCE_CONFIRMED";
+    if (method === "llm" || method === "manual" || !wouldConfirm) {
+      const { candidateId } = await recordRelationshipCandidate(db, {
+        fact,
+        resolvedSourceEntityId: src.entityId,
+        resolvedTargetEntityId: tgt.entityId,
+        agentRunId: ctx.runId,
+      });
+      return { action: "candidate", candidateId, entityIds: { source: src.entityId, target: tgt.entityId } };
+    }
+
     const result = await upsertRelationship(ctx, {
       sourceEntityId: src.entityId,
       targetEntityId: tgt.entityId,
@@ -124,6 +141,7 @@ export async function publishVerifiedFact(
       role: fact.role ?? null,
       startDate: fact.startDate ?? null,
       endDate: fact.endDate ?? null,
+      assertedCurrent: fact.assertedCurrent,
       confidence: fact.confidence,
       sourceType: fact.sourceType,
       sourceId: evidenceSource.id,
@@ -164,12 +182,15 @@ async function upsertRelationship(
     role: string | null;
     startDate: Date | null;
     endDate: Date | null;
+    assertedCurrent?: boolean;
     confidence: Confidence;
     sourceType: SourceType;
     sourceId: string;
     createdBy: string;
   },
 ): Promise<"created" | "updated" | "unchanged"> {
+  const temporalOf = (status: EntityStatus) =>
+    deriveTemporalState({ validFrom: o.startDate, validTo: o.endDate, status, assertedCurrent: o.assertedCurrent });
   const existing = await ctx.db.relationship.findFirst({
     where: {
       sourceEntityId: o.sourceEntityId,
@@ -185,7 +206,14 @@ async function upsertRelationship(
     if (endChanged || confChanged) {
       await ctx.db.relationship.update({
         where: { id: existing.id },
-        data: { endDate: o.endDate, confidence: o.confidence, lastVerifiedAt: new Date() },
+        data: {
+          endDate: o.endDate,
+          confidence: o.confidence,
+          lastVerifiedAt: new Date(),
+          lastConfirmedAt: new Date(),
+          observedAt: new Date(),
+          temporalState: temporalOf(existing.status),
+        },
       });
       await ctx.db.changeLog.create({
         data: {
@@ -200,6 +228,11 @@ async function upsertRelationship(
       ctx.stats.updated++;
       return "updated";
     }
+    // No material change — but a source just re-confirmed the relationship holds.
+    await ctx.db.relationship.update({
+      where: { id: existing.id },
+      data: { lastConfirmedAt: new Date(), observedAt: new Date() },
+    });
     ctx.stats.updated++;
     return "unchanged";
   }
@@ -213,6 +246,9 @@ async function upsertRelationship(
       role: o.role,
       startDate: o.startDate,
       endDate: o.endDate,
+      observedAt: new Date(),
+      lastConfirmedAt: new Date(),
+      temporalState: temporalOf("ACTIVE"),
       confidence: o.confidence,
       confidenceScore: confidenceToScore(o.confidence),
       verificationState: "PUBLISHED",

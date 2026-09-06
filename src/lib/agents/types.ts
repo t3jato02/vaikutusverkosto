@@ -59,6 +59,13 @@ export interface ProposedFact {
   sourceType: SourceType;
   sourceName: string;
   publisher: string;
+  /** How the fact was extracted. "llm" and non-official sources route to the
+   *  RelationshipCandidate lane instead of publishing directly. */
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  sourceDocumentId?: string | null;
+  /** Source explicitly asserts a present-day active role. */
+  assertedCurrent?: boolean;
 }
 
 /** Reference to an entity that must be resolved (never merged on name alone). */
@@ -82,6 +89,7 @@ export interface RunStats {
   updated: number;
   rejected: number;
   errors: number;
+  candidates: number;
 }
 
 export interface RunContext {
@@ -153,6 +161,7 @@ export interface RunReport {
   updated: number;
   rejected: number;
   errors: number;
+  candidates?: number;
   skippedLock: boolean;
   /** True when a budget-tick ended before the full batch was processed (resumable). */
   continuing?: boolean;

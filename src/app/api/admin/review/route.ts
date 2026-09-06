@@ -4,6 +4,8 @@ import {
   reviewRelationship,
   reviewResolutionCandidate,
   reviewCorrection,
+  promoteCandidate,
+  rejectCandidate,
   type RelationshipReviewAction,
   type CandidateReviewAction,
 } from "@/lib/review";
@@ -40,6 +42,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "bad_action" }, { status: 400 });
     }
     result = await reviewResolutionCandidate(id, action as CandidateReviewAction, entityId, note);
+  } else if (target === "relationship_candidate") {
+    if (action === "approve") result = await promoteCandidate(id, note);
+    else if (action === "reject") result = await rejectCandidate(id, note);
+    else return NextResponse.json({ error: "bad_action" }, { status: 400 });
   } else if (target === "correction") {
     if (!["investigate", "resolve", "dismiss", "dispute"].includes(action)) {
       return NextResponse.json({ error: "bad_action" }, { status: 400 });

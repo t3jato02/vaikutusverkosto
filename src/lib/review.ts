@@ -4,6 +4,8 @@
 
 import type { VerificationStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { confidenceToScore } from "@/lib/verification";
+import { deriveTemporalState } from "@/lib/temporal";
 
 export type RelationshipReviewAction = "approve" | "reject" | "dispute" | "stale";
 
@@ -126,6 +128,142 @@ export async function reviewCorrection(
         beforeData: { status: c.status },
         afterData: { status: nextStatus },
         note: note?.slice(0, 2000) ?? null,
+      },
+    }),
+  ]);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------- candidates
+
+export async function promoteCandidate(
+  candidateId: string,
+  note?: string,
+): Promise<{ ok: true; relationshipId: string } | { ok: false; error: string }> {
+  const c = await db.relationshipCandidate.findUnique({ where: { id: candidateId } });
+  if (!c) return { ok: false, error: "not_found" };
+  if (c.status !== "PENDING" && c.status !== "NEEDS_REVIEW" && c.status !== "AUTO_ACCEPTABLE") {
+    return { ok: false, error: "already_resolved" };
+  }
+  if (!c.resolvedSourceEntityId || !c.resolvedTargetEntityId) {
+    return { ok: false, error: "entities_unresolved" };
+  }
+  if (c.resolvedSourceEntityId === c.resolvedTargetEntityId) {
+    return { ok: false, error: "self_relationship" };
+  }
+
+  // Dedupe against an existing published relationship — attach evidence instead
+  // of creating a duplicate edge.
+  const existing = await db.relationship.findFirst({
+    where: {
+      sourceEntityId: c.resolvedSourceEntityId,
+      targetEntityId: c.resolvedTargetEntityId,
+      relationshipType: c.relationshipType,
+      role: c.role,
+    },
+    select: { id: true },
+  });
+
+  const source = await db.source.upsert({
+    where: { sourceUrl: c.evidenceUrl },
+    update: { lastCheckedAt: new Date() },
+    create: {
+      sourceUrl: c.evidenceUrl,
+      sourceName: c.sourceName,
+      publisher: c.publisher,
+      sourceType: c.sourceType,
+      documentTitle: c.evidenceTitle,
+    },
+  });
+
+  let relationshipId: string;
+  if (existing) {
+    await db.evidence.create({
+      data: { relationshipId: existing.id, sourceId: source.id, documentTitle: c.evidenceTitle, confidence: "HIGH" },
+    });
+    await db.relationship.update({
+      where: { id: existing.id },
+      data: { verificationStatus: "HUMAN_VERIFIED", createdBy: "human", lastVerifiedAt: new Date(), lastConfirmedAt: new Date() },
+    });
+    relationshipId = existing.id;
+  } else {
+    const temporalState = deriveTemporalState({
+      validFrom: c.proposedValidFrom,
+      validTo: c.proposedValidTo,
+      status: "ACTIVE",
+    });
+    const rel = await db.relationship.create({
+      data: {
+        sourceEntityId: c.resolvedSourceEntityId,
+        targetEntityId: c.resolvedTargetEntityId,
+        relationshipType: c.relationshipType,
+        role: c.role,
+        startDate: c.proposedValidFrom,
+        endDate: c.proposedValidTo,
+        amount: c.amount,
+        currency: c.currency,
+        observedAt: new Date(),
+        lastConfirmedAt: new Date(),
+        temporalState,
+        confidence: "HIGH",
+        confidenceScore: c.confidenceScore ?? confidenceToScore("HIGH"),
+        verificationState: "PUBLISHED",
+        verificationStatus: "HUMAN_VERIFIED",
+        createdBy: "human",
+        lastVerifiedAt: new Date(),
+        evidence: { create: [{ sourceId: source.id, documentTitle: c.evidenceTitle, confidence: "HIGH" }] },
+      },
+    });
+    relationshipId = rel.id;
+  }
+
+  await db.$transaction([
+    db.relationshipCandidate.update({
+      where: { id: candidateId },
+      data: { status: "ACCEPTED", publishedRelationshipId: relationshipId, reviewedAt: new Date(), reviewedBy: "admin" },
+    }),
+    db.reviewAction.create({
+      data: {
+        targetType: "relationship_candidate",
+        targetId: candidateId,
+        action: "approve",
+        beforeData: { status: c.status },
+        afterData: { status: "ACCEPTED", publishedRelationshipId: relationshipId },
+        note: note?.slice(0, 2000) ?? null,
+      },
+    }),
+    db.changeLog.create({
+      data: {
+        eventType: "RELATIONSHIP_ADDED",
+        entityId: c.resolvedSourceEntityId,
+        relationshipId,
+        description: `Ehdokas hyväksytty tarkastajan toimesta: ${c.relationshipType}`,
+        occurredAt: new Date(),
+      },
+    }),
+  ]);
+  return { ok: true, relationshipId };
+}
+
+export async function rejectCandidate(
+  candidateId: string,
+  reason?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const c = await db.relationshipCandidate.findUnique({ where: { id: candidateId }, select: { id: true, status: true } });
+  if (!c) return { ok: false, error: "not_found" };
+  await db.$transaction([
+    db.relationshipCandidate.update({
+      where: { id: candidateId },
+      data: { status: "REJECTED", rejectionReason: reason?.slice(0, 500) ?? null, reviewedAt: new Date(), reviewedBy: "admin" },
+    }),
+    db.reviewAction.create({
+      data: {
+        targetType: "relationship_candidate",
+        targetId: candidateId,
+        action: "reject",
+        beforeData: { status: c.status },
+        afterData: { status: "REJECTED" },
+        note: reason?.slice(0, 2000) ?? null,
       },
     }),
   ]);

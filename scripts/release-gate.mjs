@@ -158,6 +158,31 @@ await (async () => {
       if (dupStrongIds) throw new Error(`duplicate strong identifiers: ${dupStrongIds}`);
       return "no duplicate (provider, identifier) strong ids";
     });
+
+    // B.5 Phase 5 — temporal invariants.
+    const currentWithPastEnd = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "temporalState" = 'CURRENT' AND "endDate" IS NOT NULL AND "endDate" < CURRENT_DATE`));
+    const invertedWindow = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "startDate" IS NOT NULL AND "endDate" IS NOT NULL AND "endDate" < "startDate"`));
+    const historicalShownCurrent = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship"
+       WHERE "temporalState" <> 'HISTORICAL' AND "status" = 'FORMER'`));
+    const candidateLeak = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "RelationshipCandidate"
+       WHERE status IN ('PENDING','NEEDS_REVIEW','AUTO_ACCEPTABLE') AND "publishedRelationshipId" IS NOT NULL`));
+
+    step("temporal integrity", () => {
+      if (currentWithPastEnd) throw new Error(`CURRENT relationships with a past validTo: ${currentWithPastEnd}`);
+      if (invertedWindow) throw new Error(`validTo < validFrom: ${invertedWindow}`);
+      if (historicalShownCurrent) throw new Error(`FORMER-status relationships not marked HISTORICAL: ${historicalShownCurrent}`);
+      return "no historical-as-current, valid windows, deterministic state";
+    });
+    step("candidate lane integrity", () => {
+      if (candidateLeak) throw new Error(`unresolved candidates carrying a published relationship id: ${candidateLeak}`);
+      return "no pending candidate published as a fact";
+    });
   } finally {
     await db.$disconnect();
   }
