@@ -139,9 +139,10 @@ Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git r
 ## Routes
 
 `/` · `/search` · `/person/[slug]` · `/organization/[slug]` · `/company/[slug]` ·
-`/institution/[slug]` · `/explore` · `/money` · `/decisions` · `/map` · `/changes` ·
-`/compare` · `/investigate` · `/methodology` · `/sources` · `/about` · `/corrections` ·
-`/admin` (+ `/admin/agents`, `/admin/review`) · `/api` (docs) · public API under `/api/*`
+`/institution/[slug]` · `/media` · `/media/[slug]` · `/toimittajat` · `/toimittajat/[slug]` · `/explore` ·
+`/money` · `/decisions` · `/map` · `/changes` · `/compare` · `/investigate` · `/methodology` ·
+`/sources` · `/about` · `/corrections` · `/admin` (+ `/admin/agents`, `/admin/review`) ·
+`/api` (docs) · public API under `/api/*`
 
 ## Data model (summary)
 
@@ -153,6 +154,11 @@ Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git r
 - **Decision / Vote** — decision-impact graph.
 - **Source / Evidence** — source-first; every published relationship has ≥ 1 evidence record.
 - **Position, Event** — roles and timeline events.
+- **Media & journalism** — `MediaOutlet` (editorial affiliation only from documented sources, never
+  transferred to journalists), `Article`/`ArticleAuthor`/`ArticleMention` (metadata-first publication
+  corpus), `ContentAnalysis` (versioned, recomputable coverage), `PoliticalAffiliation` (strict
+  A/B/C model, human-review-gated), `PersonalFact` (never-inferred biographic fields with source +
+  evidence grade).
 - **AgentRun / AgentFinding / VerificationQueue / ChangeLog / Correction / RightOfReply /
   MethodologyVersion** — operations, verification, change feed, corrections, methodology.
 

@@ -7,6 +7,7 @@ import CommandPalette from "@/components/CommandPalette";
 
 const NAV = [
   { href: "/explore", label: "Tutki" },
+  { href: "/media", label: "Media" },
   { href: "/money", label: "Raha" },
   { href: "/foreign", label: "Kv-yhteydet" },
   { href: "/analytics", label: "Analyysi" },

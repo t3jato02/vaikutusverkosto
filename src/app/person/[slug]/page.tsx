@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { resolveEntityBySlug, getPersonProfile, entityUrlFor } from "@/lib/queries";
+import { isJournalistSubtype } from "@/lib/journalism";
 import { baseUrl } from "@/lib/site";
 import { TIERS } from "@/lib/constants";
 import { formatDate, formatDateLong, formatEur } from "@/lib/format";
@@ -19,6 +20,7 @@ import {
   type RelationshipInput,
 } from "@/lib/metrics";
 import Avatar from "@/components/Avatar";
+import PoliticianMediaCoverage from "@/components/journalism/PoliticianMediaCoverage";
 import { ConfidenceBadge } from "@/components/badges";
 import { sourceTypeLabel } from "@/components/SourceLink";
 import GraphView from "@/components/LazyGraphView";
@@ -46,6 +48,10 @@ export default async function PersonPage({ params }: { params: Promise<{ slug: s
   const { slug } = await params;
   const entity = await resolveEntityBySlug(slug);
   if (!entity || entity.type !== "PERSON") notFound();
+  // Journalists have a dedicated, richer canonical profile route.
+  if (isJournalistSubtype(entity.subtype)) {
+    redirect(entityUrlFor(entity.id, entity.type, entity.canonicalName, entity.subtype));
+  }
 
   const profile = await getPersonProfile(entity.id);
 
@@ -182,6 +188,8 @@ export default async function PersonPage({ params }: { params: Promise<{ slug: s
       </section>
 
       <EntityNetworkPosition entityId={entity.id} />
+
+      <PoliticianMediaCoverage personEntityId={entity.id} />
 
       {/* network */}
       <section aria-label="Verkosto">
