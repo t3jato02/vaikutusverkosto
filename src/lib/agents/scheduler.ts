@@ -66,6 +66,8 @@ export function runOptionsFor(sourceId: string): { concurrency: number; maxDocsP
       return { concurrency: 4, maxDocsPerTick: 15 };
     case "sidonnaisuudet-agent":
       return { concurrency: 6, maxDocsPerTick: 25 };
+    case "eu-transparency-register":
+      return { concurrency: 4, maxDocsPerTick: 40 };
     case "eu-fts-agent":
       // Records are pre-gathered in discovery; publishing is the cost.
       return { concurrency: 3, maxDocsPerTick: 200 };

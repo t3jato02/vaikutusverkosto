@@ -48,20 +48,6 @@ const PLANNED_SOURCES = [
       "luo ajallisia OWNS-yhteyksiä: Suomen valtio → yhtiö, evidenssinä virallinen listaus. " +
       "Tosiasiallisia edunsaajia ei ingestoida (rajoitettu pääsy, ei avointa lähdettä). Ei vielä käytössä.",
   },
-  {
-    id: "eu-transparency-register",
-    name: "EU Transparency Register",
-    publisher: "European Parliament / European Commission",
-    baseUrl: "https://ec.europa.eu/transparencyregister/public/",
-    sourceType: "OFFICIAL_REGISTER" as const,
-    reliabilityTier: "OFFICIAL_REGISTER" as const,
-    format: "API" as const,
-    updateCadence: "monthly" as const,
-    termsUrl: "https://ec.europa.eu/transparencyregister/public/staticPage/displayStaticPage.do?locale=en&reference=WHY_TRANSPARENCY_REGISTER",
-    notes:
-      "EU:n avoimuusrekisteri (edunvalvojat, rahoitus, asiakkaat). JSON/CSV-vienti saatavilla. " +
-      "Adapteri suunnitteilla. Ei vielä käytössä.",
-  },
 ] as const;
 
 /**
