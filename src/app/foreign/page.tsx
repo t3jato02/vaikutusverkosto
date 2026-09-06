@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { entityUrlFor } from "@/lib/queries";
+import { entityUrlFor, projectUrlFor } from "@/lib/queries";
 import { formatEur } from "@/lib/format";
 import { foreignFundingOverview, buildForeignFundingWhere, type ForeignFundingFilters } from "@/lib/foreign";
 import { FLOW_TYPE_LABELS, FUNDING_TYPE_LABELS, fundingTypeLabel, flowLabel } from "@/lib/constants";
@@ -186,7 +186,14 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
               <p className="mt-0.5 text-[11px] text-muted [overflow-wrap:anywhere]">
                 {f.fundingType ? fundingTypeLabel(f.fundingType) : flowLabel(f.flowType)}
                 {f.funderCountryCode ? ` · ${countryName.get(f.funderCountryCode) ?? f.funderCountryCode}` : ""}
-                {f.project ? ` · hanke: ${f.project.name}` : ""}
+                {f.project ? (
+                  <>
+                    {" · hanke: "}
+                    <Link href={projectUrlFor(f.project.id, f.project.name)} className="text-accent hover:underline">
+                      {f.project.name}
+                    </Link>
+                  </>
+                ) : null}
                 {f.periodYear ? ` · ${f.periodYear}` : ""} · {verificationLabel(f.verificationStatus).label}
                 {" · "}
                 {f.sourceCount === 1 ? "1 lähde" : `${f.sourceCount} lähdettä`}

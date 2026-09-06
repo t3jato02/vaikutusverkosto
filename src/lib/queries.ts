@@ -503,3 +503,118 @@ export function entityUrlFor(id: string, type: EntityType, name: string): string
           : "/organization";
   return `${prefix}/${slug}-${id.slice(0, 8)}`;
 }
+
+// ---------------------------------------------------------------- projects
+
+/** Slug for a Project route: `<slugified name>-<8 hex>`. */
+export function projectUrlFor(id: string, name: string): string {
+  const slug =
+    name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[^\x00-\x7f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "hanke";
+  return `/project/${slug}-${id.slice(0, 8)}`;
+}
+
+/** Resolve a Project from a `<slug>-<8hex>` path segment (or a bare id/short id). */
+export async function resolveProjectBySlug(slug: string) {
+  const m = slug.match(/-?([0-9a-f]{8})$/i);
+  if (m) {
+    const rows = await db.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "Project" WHERE id::text LIKE ${m[1].toLowerCase() + "%"} LIMIT 1`;
+    if (rows[0]) return db.project.findUnique({ where: { id: rows[0].id } });
+  }
+  return db.project.findFirst({ where: { sourceIdentifier: slug } });
+}
+
+/** Full project profile: flows (canonical, evidenced), parties, sources. */
+export async function getProjectDetail(projectId: string) {
+  const [project, flows] = await Promise.all([
+    db.project.findUnique({ where: { id: projectId } }),
+    db.financialFlow.findMany({
+      where: { projectId, ...publicVisibleWhere },
+      orderBy: [{ periodYear: "desc" }, { amount: "desc" }],
+      include: {
+        payerEntity: { select: { id: true, canonicalName: true, type: true } },
+        recipientEntity: { select: { id: true, canonicalName: true, type: true } },
+        evidence: { include: { source: true }, take: 3 },
+      },
+    }),
+  ]);
+  if (!project) return null;
+  const totalDocumentedEur = flows.reduce((s, f) => s + Number(f.amount ?? 0), 0);
+  const years = [...new Set(flows.map((f) => f.periodYear).filter((y): y is number => y != null))].sort();
+
+  type Party = { id: string; canonicalName: string; type: EntityType; role: "funder" | "recipient" };
+  const partyMap = new Map<string, Party>();
+  for (const f of flows) {
+    if (!partyMap.has(f.payerEntity.id)) partyMap.set(f.payerEntity.id, { ...f.payerEntity, role: "funder" });
+    if (!partyMap.has(f.recipientEntity.id)) partyMap.set(f.recipientEntity.id, { ...f.recipientEntity, role: "recipient" });
+  }
+  const parties = [...partyMap.values()];
+  const orgIds = parties.filter((p) => p.type !== "PERSON").map((p) => p.id);
+  return { project, flows, totalDocumentedEur, years, parties, orgIds };
+}
+
+/** Projects an organisation is a documented party to (as funder or recipient). */
+export async function projectsForEntity(entityId: string, limit = 12) {
+  const flows = await db.financialFlow.findMany({
+    where: {
+      projectId: { not: null },
+      OR: [{ payerEntityId: entityId }, { recipientEntityId: entityId }],
+      ...publicVisibleWhere,
+    },
+    select: {
+      projectId: true,
+      amount: true,
+      periodYear: true,
+      recipientEntityId: true,
+      project: { select: { id: true, name: true, programme: true, startDate: true, endDate: true } },
+    },
+  });
+  const byProject = new Map<string, { project: NonNullable<(typeof flows)[number]["project"]>; amount: number; years: Set<number>; role: "funder" | "recipient" }>();
+  for (const f of flows) {
+    if (!f.project) continue;
+    const cur = byProject.get(f.project.id) ?? {
+      project: f.project,
+      amount: 0,
+      years: new Set<number>(),
+      role: f.recipientEntityId === entityId ? ("recipient" as const) : ("funder" as const),
+    };
+    cur.amount += Number(f.amount ?? 0);
+    if (f.periodYear != null) cur.years.add(f.periodYear);
+    byProject.set(f.project.id, cur);
+  }
+  return [...byProject.values()]
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, limit)
+    .map((p) => ({ ...p, years: [...p.years].sort() }));
+}
+
+export async function searchProjects(q: string, limit = 5) {
+  const term = q.trim();
+  if (term.length < 2) return [];
+  const projects = await db.project.findMany({
+    where: {
+      OR: [
+        { name: { contains: term, mode: "insensitive" } },
+        { programme: { contains: term, mode: "insensitive" } },
+        { sourceIdentifier: { contains: term, mode: "insensitive" } },
+      ],
+    },
+    take: limit,
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      programme: true,
+      startDate: true,
+      endDate: true,
+      flows: { select: { recipientEntity: { select: { canonicalName: true } } }, take: 1, orderBy: { amount: "desc" } },
+    },
+  });
+  return projects;
+}
