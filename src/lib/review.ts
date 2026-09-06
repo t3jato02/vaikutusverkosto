@@ -302,3 +302,48 @@ export async function resolveSourceConflict(
   ]);
   return { ok: true };
 }
+
+// ---------------------------------------------------------------- political affiliations (section 24)
+
+/**
+ * Human review of a PoliticalAffiliation row (always admin-gated). Approving
+ * publishes it (reviewStatus=PUBLISHED) and sets verificationStatus to
+ * HUMAN_VERIFIED — the only way that status may be reached. Content-analysis
+ * cannot create these rows in the first place (see safety.ts).
+ */
+export async function reviewAffiliation(
+  affiliationId: string,
+  action: "approve" | "reject" | "dispute",
+  note?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const c = await db.politicalAffiliation.findUnique({
+    where: { id: affiliationId },
+    select: { id: true, reviewStatus: true, verificationStatus: true, personEntityId: true, sourceUrl: true },
+  });
+  if (!c) return { ok: false, error: "not_found" };
+  if (c.reviewStatus === "PUBLISHED" || c.reviewStatus === "REJECTED") return { ok: false, error: "already_resolved" };
+  if (action === "approve" && !/^https?:\/\//i.test(c.sourceUrl)) {
+    return { ok: false, error: "missing_source" };
+  }
+
+  const nextReview = action === "approve" ? "PUBLISHED" : action === "reject" ? "REJECTED" : "DISPUTED";
+  const nextVerification = action === "approve" ? "HUMAN_VERIFIED" : action === "dispute" ? "DISPUTED" : c.verificationStatus;
+
+  await db.$transaction([
+    db.politicalAffiliation.update({
+      where: { id: affiliationId },
+      data: { reviewStatus: nextReview, verificationStatus: nextVerification, reviewedBy: "admin", reviewedAt: new Date() },
+    }),
+    db.reviewAction.create({
+      data: {
+        targetType: "affiliation",
+        targetId: affiliationId,
+        action,
+        beforeData: { reviewStatus: c.reviewStatus, verificationStatus: c.verificationStatus },
+        afterData: { reviewStatus: nextReview, verificationStatus: nextVerification },
+        note: note?.slice(0, 2000) ?? null,
+      },
+    }),
+  ]);
+  return { ok: true };
+}

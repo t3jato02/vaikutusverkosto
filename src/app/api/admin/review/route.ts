@@ -4,6 +4,7 @@ import {
   reviewRelationship,
   reviewResolutionCandidate,
   reviewCorrection,
+  reviewAffiliation,
   promoteCandidate,
   rejectCandidate,
   resolveSourceConflict,
@@ -58,6 +59,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "bad_action" }, { status: 400 });
     }
     result = await reviewCorrection(id, action as "investigate" | "resolve" | "dismiss" | "dispute", note);
+  } else if (target === "affiliation") {
+    if (!["approve", "reject", "dispute"].includes(action)) {
+      return NextResponse.json({ error: "bad_action" }, { status: 400 });
+    }
+    result = await reviewAffiliation(id, action as "approve" | "reject" | "dispute", note);
   } else {
     return NextResponse.json({ error: "bad_target" }, { status: 400 });
   }
