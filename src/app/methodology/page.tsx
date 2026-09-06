@@ -68,6 +68,41 @@ export default function MethodologyPage() {
         </p>
       </Section>
 
+      <Section id="international-funding" title="Kansainvälinen rahoitus">
+        <p>
+          <strong>Kansainväliset yhteydet</strong> -näkymä esittää dokumentoituja kansainvälisiä
+          rahavirtoja ja yhteyksiä. Ensimmäinen lähde on EU:n Financial Transparency System (FTS):
+          EU-budjetin sitoumus- ja sopimusrivit, joiden edunsaajan maa on Suomi. Jokainen rivi on
+          erillinen, evidensoitu rahavirta <em>Euroopan komissio → suomalainen saaja</em>.
+        </p>
+        <p className="mt-2">
+          Ulkomainen tai EU-rahoitus <strong>ei itsessään</strong> tarkoita laitonta vaikuttamista,
+          korruptiota, epälojaaliutta tai agenttisuhdetta. Se on dokumentoitu rahoitussuhde.
+        </p>
+        <p className="mt-2">
+          <strong>Suora suhde vs. verkostopolku.</strong> Jos ulkomainen rahoittaja rahoittaa
+          organisaatiota, ja henkilö on kyseisen organisaation hallituksen jäsen, se <em>ei</em>
+          tarkoita, että henkilö sai ulkomaista rahoitusta. Käyttöliittymä voi näyttää
+          verkostopolun, mutta tietokanta ei luo suoraa rahavirtaa henkilölle, joka ei ole
+          rahavirran vastaanottaja.
+        </p>
+        <p className="mt-2">
+          Sama evidenssistandardi koskee kaikkia rahoittajia riippumatta maasta (EU, Yhdysvallat,
+          Venäjä, Kiina, Qatar, Saudi-Arabia, Pohjoismaat) tai organisaatiotyypistä (säätiö,
+          kansalaisjärjestö, yritys, uskonnollinen organisaatio, valtio).
+        </p>
+      </Section>
+
+      <Section id="network-metrics" title="Verkostomittarit">
+        <p>
+          Verkoston rakennetta voidaan kuvata mittareilla kuten astekeskeisyys (kuinka moneen
+          toimijaan entity on suoraan kytketty) ja välittäjäasema (kuinka usein entity sijaitsee
+          kahden muun toimijan lyhimmällä verkostopolulla). Nämä kuvaavat <strong>verkon
+          rakennetta</strong>, eivät henkilön moraalia, lainmukaisuutta tai syyllisyyttä. Korkea
+          arvo ei ole syytös eikä &quot;epäilyttävyys-score&quot;.
+        </p>
+      </Section>
+
       <Section id="source-quality" title="Lähteiden laatu">
         <p>
           Lähteet suositaan järjestyksessä: (1) alkuperäinen viranomaisrekisteri tai -rajapinta,

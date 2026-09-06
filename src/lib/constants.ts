@@ -65,6 +65,11 @@ export const RELATIONSHIP_TYPE_LABELS: Record<RelationshipType, Label> = {
   CANDIDATE_OF: { fi: "ehdokas", en: "candidate of" },
   SITS_IN: { fi: "istuu", en: "sits in" },
   EDUCATED_AT: { fi: "opiskellut", en: "educated at" },
+  REGISTERED_LOBBY_ORGANIZATION: { fi: "rekisteröity edunvalvoja", en: "registered lobby organisation" },
+  REPRESENTS_INTERESTS_OF: { fi: "edustaa etuja", en: "represents interests of" },
+  CLIENT_OF: { fi: "asiakas", en: "client of" },
+  DECLARED_EU_INTEREST: { fi: "ilmoitettu EU-intressi", en: "declared EU interest" },
+  ACCREDITED_REPRESENTATIVE_OF: { fi: "akkreditoitu edustaja", en: "accredited representative of" },
 };
 
 export const FLOW_TYPE_LABELS: Record<FlowType, Label> = {

@@ -1,4 +1,16 @@
-import type { PrismaClient, SourceType, RelationshipType, FlowType, EntityType, Confidence } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence } from "@prisma/client";
+
+/** Optional project a financial flow funds (Sprint C2). */
+export interface ProjectRef {
+  sourceIdentifier?: string | null;
+  name: string;
+  programme?: string | null;
+  description?: string | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  locationCountry?: string | null;
+  municipality?: string | null;
+}
 
 /** A stable, source-side identified document (one unit of ingestion). */
 export interface SourceDocument {
@@ -40,6 +52,13 @@ export interface NormalizedFact {
   extractorVersion?: string;
   /** Source explicitly asserts a present-day active role. */
   assertedCurrent?: boolean;
+  // Sprint C2 — foreign funding / project.
+  externalRecordId?: string;
+  rawFundingType?: string | null;
+  fundingType?: FundingType;
+  funderCountryCode?: string | null;
+  recipientCountryCode?: string | null;
+  projectRef?: ProjectRef;
 }
 
 /** A fact proposed by an agent, ready for verification + publication. */
@@ -71,6 +90,13 @@ export interface ProposedFact {
   sourceDocumentId?: string | null;
   /** Source explicitly asserts a present-day active role. */
   assertedCurrent?: boolean;
+  // Sprint C2 — foreign funding / project.
+  externalRecordId?: string;
+  rawFundingType?: string | null;
+  fundingType?: FundingType;
+  funderCountryCode?: string | null;
+  recipientCountryCode?: string | null;
+  projectRef?: ProjectRef;
 }
 
 /** Reference to an entity that must be resolved (never merged on name alone). */
@@ -85,6 +111,13 @@ export interface EntityRef {
   municipality?: string | null;
   description?: string | null;
   alias?: string | null;
+  /** ISO-3166 alpha-2, set on entity creation (Sprint C). */
+  countryCode?: string | null;
+  /** Institutional classification, set on creation when known (Sprint C). */
+  entityCategory?:
+    | "GOVERNMENT" | "GOVERNMENT_AGENCY" | "STATE_OWNED_COMPANY" | "COMPANY"
+    | "FOUNDATION" | "NGO" | "RELIGIOUS_ORGANIZATION" | "THINK_TANK" | "UNIVERSITY"
+    | "INTERNATIONAL_ORGANIZATION" | "POLITICAL_PARTY" | "MEDIA_ORGANIZATION" | "OTHER";
 }
 
 export interface RunStats {

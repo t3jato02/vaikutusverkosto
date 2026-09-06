@@ -34,20 +34,6 @@ function registryRowFromAdapter(a: SourceAdapter) {
 // the scheduler never runs a disabled source.
 const PLANNED_SOURCES = [
   {
-    id: "eu-fts",
-    name: "EU Financial Transparency System",
-    publisher: "European Commission — DG Budget",
-    baseUrl: "https://ec.europa.eu/budget/financial-transparency-system/",
-    sourceType: "OFFICIAL_REGISTER" as const,
-    reliabilityTier: "OFFICIAL_REGISTER" as const,
-    format: "PDF" as const, // annual XLSX/CSV downloads
-    updateCadence: "monthly" as const,
-    termsUrl: "https://ec.europa.eu/info/legal-notice_en",
-    notes:
-      "EU:n suorien avustusten ja hankintojen vuosiaineistot (XLSX/CSV). Adapteri vaatii " +
-      "XLSX-jäsentimen + vuosikohtaisen latauksen. Ei vielä käytössä.",
-  },
-  {
     id: "eu-transparency-register",
     name: "EU Transparency Register",
     publisher: "European Parliament / European Commission",

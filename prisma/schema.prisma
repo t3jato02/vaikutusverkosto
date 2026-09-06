@@ -199,6 +199,12 @@ enum RelationshipType {
   CANDIDATE_OF
   SITS_IN
   EDUCATED_AT
+  // EU Transparency Register semantics (Sprint C2) — precise, never "INFLUENCES".
+  REGISTERED_LOBBY_ORGANIZATION
+  REPRESENTS_INTERESTS_OF
+  CLIENT_OF
+  DECLARED_EU_INTEREST
+  ACCREDITED_REPRESENTATIVE_OF
 }
 
 enum VerificationState {
@@ -329,14 +335,19 @@ model Country {
 model Project {
   id                String    @id @default(uuid()) @db.Uuid
   name              String
+  sourceIdentifier  String?   @unique // source's own project/call id — dedup key
+  programme         String? // funding programme (e.g. "Creative Europe")
   description       String?   @db.Text
   locationCountry   String? // ISO2
   locationRegion    String?
   municipality      String?
   locationPrecision String    @default("COUNTRY") // COUNTRY | REGION | MUNICIPALITY | ADDRESS | COORDINATE
+  latitude          Float?
+  longitude         Float?
   startDate         DateTime? @db.Date
   endDate           DateTime? @db.Date
   organizerEntityId String?   @db.Uuid
+  funderEntityId    String?   @db.Uuid
   totalFundingEur   Decimal?  @db.Decimal(18, 2)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -345,6 +356,7 @@ model Project {
 
   @@index([locationCountry])
   @@index([municipality])
+  @@index([programme])
 }
 
 enum FlowType {
@@ -382,6 +394,9 @@ model FinancialFlow {
   // Sprint C — foreign funding.
   originalAmount            Decimal? @db.Decimal(18, 2)
   originalCurrency          String?
+  // Stable per-source record key for multi-record dedup (Sprint C2).
+  externalRecordId         String?  @unique
+  rawFundingType           String? // source's own type label, kept verbatim
   funderCountryCode         String? // ISO2 of the payer's country; null = unknown
   recipientCountryCode      String? // ISO2 of the recipient's country
   isForeign                 Boolean  @default(false) // funder country present and != FI

@@ -56,6 +56,83 @@ export function buildForeignFundingWhere(f: ForeignFundingFilters): Prisma.Finan
   return where;
 }
 
+export interface FundingGraph {
+  nodes: { id: string; label: string; kind: string; country?: string | null; amount?: number }[];
+  edges: { id: string; source: string; target: string; amount: number; currency: string; fundingType: string | null; year: number | null; verification: string; sourceCount: number; flowId: string }[];
+  truncated: boolean;
+}
+
+/**
+ * Bounded funding graph: Country → Funder → (Intermediary) → Recipient → Project.
+ * Never returns the whole database — capped by `limit` flows.
+ */
+export async function foreignFundingGraph(f: ForeignFundingFilters & { limit?: number } = {}): Promise<FundingGraph> {
+  const where = buildForeignFundingWhere(f);
+  const limit = Math.min(Math.max(f.limit ?? 100, 1), 250);
+  const flows = await db.financialFlow.findMany({
+    where,
+    orderBy: { amount: "desc" },
+    take: limit + 1,
+    include: {
+      payerEntity: { select: { id: true, canonicalName: true, type: true, entityCategory: true, countryCode: true } },
+      recipientEntity: { select: { id: true, canonicalName: true, type: true, entityCategory: true, countryCode: true } },
+      project: { select: { id: true, name: true } },
+    },
+  });
+  const truncated = flows.length > limit;
+  const use = truncated ? flows.slice(0, limit) : flows;
+
+  const nodes = new Map<string, FundingGraph["nodes"][number]>();
+  const add = (id: string, label: string, kind: string, country?: string | null) => {
+    if (!nodes.has(id)) nodes.set(id, { id, label, kind, country });
+  };
+  const edges: FundingGraph["edges"] = [];
+  for (const fl of use) {
+    const country = fl.funderCountryCode ?? "??";
+    add(`country:${country}`, country, "country", country);
+    add(`e:${fl.payerEntity.id}`, fl.payerEntity.canonicalName, "funder", fl.payerEntity.countryCode);
+    add(`e:${fl.recipientEntity.id}`, fl.recipientEntity.canonicalName, "recipient", fl.recipientEntity.countryCode);
+    // country → funder (structural)
+    edges.push({
+      id: `cf:${country}:${fl.payerEntity.id}`,
+      source: `country:${country}`,
+      target: `e:${fl.payerEntity.id}`,
+      amount: 0,
+      currency: fl.currency,
+      fundingType: null,
+      year: null,
+      verification: "structural",
+      sourceCount: 0,
+      flowId: "",
+    });
+    const target = `e:${fl.recipientEntity.id}`;
+    if (fl.project) {
+      add(`p:${fl.project.id}`, fl.project.name, "project", "FI");
+      edges.push({
+        id: `rp:${fl.recipientEntity.id}:${fl.project.id}`,
+        source: `e:${fl.recipientEntity.id}`,
+        target: `p:${fl.project.id}`,
+        amount: 0,
+        currency: fl.currency,
+        fundingType: null,
+        year: null,
+        verification: "structural",
+        sourceCount: 0,
+        flowId: "",
+      });
+    }
+    if (fl.intermediaryEntityId) {
+      add(`e:${fl.intermediaryEntityId}`, "välittäjä", "intermediary");
+      // Two documented steps, never one synthesised "A → C".
+      edges.push({ id: `f1:${fl.id}`, source: `e:${fl.payerEntity.id}`, target: `e:${fl.intermediaryEntityId}`, amount: Number(fl.amount), currency: fl.currency, fundingType: fl.fundingType, year: fl.periodYear, verification: fl.verificationStatus, sourceCount: fl.sourceCount, flowId: fl.id });
+      edges.push({ id: `f2:${fl.id}`, source: `e:${fl.intermediaryEntityId}`, target, amount: Number(fl.amount), currency: fl.currency, fundingType: fl.fundingType, year: fl.periodYear, verification: fl.verificationStatus, sourceCount: fl.sourceCount, flowId: fl.id });
+    } else {
+      edges.push({ id: `f:${fl.id}`, source: `e:${fl.payerEntity.id}`, target, amount: Number(fl.amount), currency: fl.currency, fundingType: fl.fundingType, year: fl.periodYear, verification: fl.verificationStatus, sourceCount: fl.sourceCount, flowId: fl.id });
+    }
+  }
+  return { nodes: [...nodes.values()], edges, truncated };
+}
+
 export async function foreignFundingOverview(f: ForeignFundingFilters = {}) {
   const where = buildForeignFundingWhere(f);
   const [total, byCountry, byType, topRecipients, countries] = await Promise.all([
