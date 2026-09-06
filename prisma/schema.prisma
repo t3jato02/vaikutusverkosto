@@ -59,46 +59,58 @@ enum EntityStatus {
 }
 
 model Entity {
-  id             String       @id @default(uuid()) @db.Uuid
+  id             String          @id @default(uuid()) @db.Uuid
   type           EntityType
   subtype        String?
   canonicalName  String
-  description    String?      @db.Text
-  status         EntityStatus @default(ACTIVE)
-  startDate      DateTime?    @db.Date
-  endDate        DateTime?    @db.Date
+  description    String?         @db.Text
+  status         EntityStatus    @default(ACTIVE)
+  startDate      DateTime?       @db.Date
+  endDate        DateTime?       @db.Date
   jurisdiction   String? // "FI", "FI-helsinki", "EU", ...
   municipality   String?
   region         String?
   country        String?
   countryCode    String? // ISO-3166 alpha-2 (Sprint C)
   entityCategory EntityCategory? // institutional classification (Sprint C)
-  officialUrls   String[]     @default([])
-  sourceCount    Int          @default(0)
-  confidence     Confidence   @default(HIGH)
+  officialUrls   String[]        @default([])
+  sourceCount    Int             @default(0)
+  confidence     Confidence      @default(HIGH)
   lastVerifiedAt DateTime?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   // Per-type extension records
-  person        Person?
-  organization  Organization?
+  person       Person?
+  organization Organization?
+  mediaOutlet  MediaOutlet?
 
-  aliases       EntityAlias[]
-  externalIds   ExternalIdentifier[]
-  outRelations  Relationship[] @relation("RelSource")
-  inRelations   Relationship[] @relation("RelTarget")
-  outFlows      FinancialFlow[] @relation("FlowPayer")
-  inFlows       FinancialFlow[] @relation("FlowRecipient")
-  positions     Position[] @relation("PositionPerson")
-  orgPositions  Position[] @relation("PositionOrg")
-  decisions     Decision[] // institution decisions
-  votes         Vote[]
-  events        Event[]
-  entityChanges ChangeLog[]
-  corrections   Correction[]
-  sourceLinks   Evidence[]
-  replies       RightOfReply[]
+  aliases                       EntityAlias[]
+  externalIds                   ExternalIdentifier[]
+  personalFacts                 PersonalFact[]         @relation("PersonalFactPerson")
+  politicalAffiliationsAsPerson PoliticalAffiliation[] @relation("PoliticalProfilePerson")
+  politicalAffiliationsAsParty  PoliticalAffiliation[] @relation("PoliticalProfileParty")
+  articlesPublished             Article[]              @relation("ArticlePublisher")
+  authoredArticles              ArticleAuthor[]        @relation("AuthorOfArticle")
+  articleMentions               ArticleMention[]       @relation("MentionedInArticle")
+  outRelations                  Relationship[]         @relation("RelSource")
+  inRelations                   Relationship[]         @relation("RelTarget")
+  outFlows                      FinancialFlow[]        @relation("FlowPayer")
+  inFlows                       FinancialFlow[]        @relation("FlowRecipient")
+  positions                     Position[]             @relation("PositionPerson")
+  orgPositions                  Position[]             @relation("PositionOrg")
+  decisions                     Decision[] @relation("InstitutionDecisions") // institution decisions
+  votes                         Vote[]
+  events                        Event[]
+  entityChanges                 ChangeLog[]
+  corrections                   Correction[]
+  sourceLinks                   Evidence[]
+  replies                       RightOfReply[]
+
+  // VAIKUTA module
+  campaignRecipients            CampaignRecipient[]
+  vaikutaContacts               VaikutaContactMethod[]
+  decisionEntity                Decision? @relation("DecisionEntity") // the matching DECISION entity (VAIKUTA)
 
   @@index([canonicalName])
   @@index([type, status])
@@ -109,52 +121,351 @@ model Entity {
 }
 
 model Person {
-  entityId            String   @id @db.Uuid
-  entity              Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  birthYear           Int?
-  profession          String?
-  partyEntityId       String?  @db.Uuid
-  electoralDistrict   String?
-  education           String?
-  imageUrl            String?
-  firstName           String?
-  lastName            String?
-  hetekaId            Int? // Eduskunta identifier
+  entityId          String   @id @db.Uuid
+  entity            Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  birthYear         Int?
+  profession        String?
+  partyEntityId     String?  @db.Uuid
+  electoralDistrict String?
+  education         String?
+  imageUrl          String?
+  firstName         String?
+  lastName          String?
+  hetekaId          Int? // Eduskunta identifier
+  // Journalism & media — journalist-specific fields (Toimittajat). The role
+  // classification lives on Entity.subtype (JOURNALIST, EDITOR_IN_CHIEF, …);
+  // these columns carry journalist-specific metadata that is *always* backed by
+  // a documented public source (see PersonalFact for source-bound fields).
+  activeYearsFrom   Int?
+  activeYearsTo     Int?
+  bioUrl            String? // official bio / employer bio
+  professionalBio   String?  @db.Text
+  writtenLanguages  String[] @default([]) // ISO-639-1; only when a source documents them
+  specialties       String[] @default([]) // erikoisalat (julkisesti dokumentoitu)
+  topicAreas        String[] @default([]) // aihealueet
+
   @@index([hetekaId])
   @@index([partyEntityId])
 }
 
 model Organization {
-  entityId            String   @id @db.Uuid
-  entity              Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  registrationNumber  String?
-  legalForm           String?
-  foundingYear        Int?
-  headquarters        String?
-  employeeCount       Int?
-  revenueEur          Decimal? @db.Decimal(18, 2)
+  entityId           String   @id @db.Uuid
+  entity             Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  registrationNumber String?
+  legalForm          String?
+  foundingYear       Int?
+  headquarters       String?
+  employeeCount      Int?
+  revenueEur         Decimal? @db.Decimal(18, 2)
+
   @@index([registrationNumber])
 }
 
 model EntityAlias {
-  id        String   @id @default(uuid()) @db.Uuid
-  entityId  String   @db.Uuid
-  entity    Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid()) @db.Uuid
+  entityId  String  @db.Uuid
+  entity    Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
   name      String
-  language  String?  // fi / en / sv / null (any)
-  aliasType String   @default("NAME_VARIANT") // NAME_VARIANT, TRANSLITERATION, PREVIOUS_NAME, COMMON_NAME
+  language  String? // fi / en / sv / null (any)
+  aliasType String  @default("NAME_VARIANT") // NAME_VARIANT, TRANSLITERATION, PREVIOUS_NAME, COMMON_NAME
+
   @@unique([entityId, name, aliasType])
   @@index([name])
 }
 
 model ExternalIdentifier {
-  id         String   @id @default(uuid()) @db.Uuid
-  entityId   String   @db.Uuid
-  entity     Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  provider   String   // eduskunta, ytj, prh, wikipedia, ...
+  id         String @id @default(uuid()) @db.Uuid
+  entityId   String @db.Uuid
+  entity     Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  provider   String // eduskunta, ytj, prh, wikipedia, ...
   identifier String
+
   @@unique([provider, identifier])
   @@index([provider])
+}
+
+// ---------------------------------------------------------------- media & journalism (Toimittajat & media)
+
+// Evidence grade (section 9). Independent of Confidence: this grades the
+// *source strength* of a specific claim, not the overall status.
+//   A — primary / official source
+//   B — strong journalistic or institutional source
+//   C — corroborated by several independent sources
+//   D — a single secondary source
+//   E — unverified; must never be shown as fact in the public UI
+enum EvidenceGrade {
+  A
+  B
+  C
+  D
+  E
+}
+
+// Journalist role classification. Stored on Entity.subtype for PERSON entities;
+// NOT a political stance — a professional classification. The subtype sets live
+// in src/lib/journalism.ts (labels + URL routing); schema has no enum here.
+// Media classification. Stored on Entity.subtype for MEDIA_ORGANIZATION.
+
+// Biographic fields that are NEVER inferred: only recorded when a public
+// source documents them explicitly (section 20). UNKNOWN otherwise.
+enum PersonalFactType {
+  BIRTH_COUNTRY
+  NATIVE_LANGUAGE
+  WORK_LANGUAGE
+  NATIONALITY
+  MOTHER_TONGUE
+}
+
+model PersonalFact {
+  id                 String             @id @default(uuid()) @db.Uuid
+  personEntityId     String             @db.Uuid
+  personEntity       Entity             @relation("PersonalFactPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  factType           PersonalFactType
+  value              String
+  proficiency        String? // language proficiency (e.g. "C2", "Äidinkieli") only when documented
+  sourceUrl          String
+  sourceName         String
+  publicationDate    DateTime?          @db.Date
+  retrievedAt        DateTime?          @default(now())
+  confidence         Confidence         @default(HIGH)
+  verificationStatus VerificationStatus @default(SOURCE_CONFIRMED)
+  evidenceGrade      EvidenceGrade      @default(C)
+  note               String?            @db.Text
+  createdAt          DateTime           @default(now())
+
+  @@unique([personEntityId, factType, value, sourceUrl])
+  @@index([personEntityId])
+}
+
+// Political-affiliation facts with a strict, non-inferring model (section 3).
+// The four types are kept absolutely separate:
+//   A DECLARED_POLITICAL_AFFILIATION      — the person's own declared membership/
+//                                          candidacy/appointment, source-required.
+//   B DOCUMENTED_POLITICAL_RELATIONSHIP   — documented professional/organisational
+//                                          connection to a political actor.
+//   C SELF_DESCRIBED_POLITICAL_VIEW       — the person's own verbatim public
+//                                          self-description; stored word-for-word.
+// There is NO "content pattern => political view" row type in this table: that
+// lives in ContentAnalysis and is labelled as automatic analysis, never as the
+// person's view.
+enum AffiliationType {
+  DECLARED_POLITICAL_AFFILIATION
+  DOCUMENTED_POLITICAL_RELATIONSHIP
+  SELF_DESCRIBED_POLITICAL_VIEW
+}
+
+enum AffiliationReviewStatus {
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+  DISPUTED
+}
+
+model PoliticalAffiliation {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  personEntityId     String                  @db.Uuid
+  personEntity       Entity                  @relation("PoliticalProfilePerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  affiliationType    AffiliationType
+  partyEntityId      String?                 @db.Uuid
+  partyEntity        Entity?                 @relation("PoliticalProfileParty", fields: [partyEntityId], references: [id], onDelete: SetNull)
+  role               String? // e.g. "kunnallisvaaliehdokas", "ministerin avustaja"
+  description        String                  @db.Text
+  verbatimText       String?                 @db.Text // SELF_DESCRIBED_POLITICAL_VIEW only — exact wording
+  selfReported       Boolean                 @default(false) // stated by the person themselves
+  // Time dimension is mandatory context (section 35): a past candidacy never
+  // becomes a present-day stance.
+  startYear          Int?
+  endYear            Int?
+  isCurrent          Boolean?
+  sourceUrl          String
+  sourceName         String
+  publicationDate    DateTime?               @db.Date
+  retrievedAt        DateTime?               @default(now())
+  confidence         Confidence              @default(HIGH)
+  verificationStatus VerificationStatus      @default(SOURCE_CONFIRMED)
+  evidenceGrade      EvidenceGrade           @default(C)
+  reviewStatus       AffiliationReviewStatus @default(PENDING_REVIEW)
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  createdBy          String? // agent name or "human"
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([personEntityId])
+  @@index([partyEntityId])
+  @@index([affiliationType])
+  @@index([reviewStatus])
+}
+
+// Media outlet / publisher profile (section 6 & 19). One row per
+// MEDIA_ORGANIZATION entity that is an outlet/publisher. The editorial
+// affiliation is an *institutional* attribute recorded only from a documented
+// source — it is never transferred to individual journalists.
+enum MediaOutletType {
+  NEWS_PAPER
+  BROADCASTER
+  MAGAZINE
+  ONLINE_MEDIA
+  NEWS_AGENCY
+  PARTY_MEDIA
+  OTHER
+}
+
+enum EditorialAffiliationType {
+  FORMALLY_PARTY_AFFILIATED
+  HISTORICALLY_PARTY_AFFILIATED
+  INDEPENDENT
+  SELF_DESCRIBED
+  UNKNOWN
+}
+
+model MediaOutlet {
+  entityId                          String                   @id @db.Uuid
+  entity                            Entity                   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  websiteUrl                        String?
+  mediaOutletType                   MediaOutletType          @default(OTHER)
+  foundingYear                      Int?
+  countryCode                       String? // ISO-3166 alpha-2
+  publishLanguages                  String[]                 @default([])
+  jsnMember                         Boolean                  @default(false)
+  jsnSourceUrl                      String?
+  fundingModel                      String?
+  fundingModelSourceUrl             String?
+  editorialAffiliationType          EditorialAffiliationType @default(UNKNOWN)
+  editorialAffiliationPartyEntityId String?                  @db.Uuid
+  editorialAffiliationSourceUrl     String?
+
+  @@index([mediaOutletType])
+  @@index([editorialAffiliationType])
+}
+
+// ---------------------------------------------------------------- article database (section 12)
+//
+// Metadata-first article storage: we store title, canonical URL, authors,
+// genre, mentions, topics and analysis outputs — NOT full copyrighted text.
+// The canonical URL is unique; the full text stays with the publisher.
+enum JournalisticGenre {
+  NEWS
+  ANALYSIS
+  COMMENT
+  COLUMN
+  OPINION
+  INVESTIGATIVE
+  INTERVIEW
+  OTHER
+}
+
+enum MentionRole {
+  SUBJECT
+  SOURCE
+  QUOTED_EXPERT
+  ORGANIZATION
+  COUNTRY
+  TOPIC
+}
+
+model Article {
+  id                String            @id @default(uuid()) @db.Uuid
+  title             String
+  canonicalUrl      String            @unique
+  publicationName   String? // denormalized publisher name when no entity exists yet
+  publisherEntityId String?           @db.Uuid
+  publisherEntity   Entity?           @relation("ArticlePublisher", fields: [publisherEntityId], references: [id], onDelete: SetNull)
+  publishedAt       DateTime?
+  updatedAt         DateTime?
+  genre             JournalisticGenre @default(OTHER)
+  language          String? // ISO-639-1
+  archivedUrl       String?
+  excerpt           String?           @db.Text // short neutral summary / lede, not full text
+  topics            String[]          @default([])
+  analysisVersion   String?           @default("journalist_content_v1")
+  sourceId          String?           @db.Uuid
+  source            Source?           @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  ingestedAt        DateTime          @default(now())
+  verifiedAt        DateTime?
+  publicVisible     Boolean           @default(true)
+
+  authors  ArticleAuthor[]
+  mentions ArticleMention[]
+
+  @@unique([title, publishedAt])
+  @@index([publisherEntityId])
+  @@index([publishedAt])
+  @@index([genre])
+}
+
+model ArticleAuthor {
+  id             String  @id @default(uuid()) @db.Uuid
+  articleId      String  @db.Uuid
+  article        Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  personEntityId String  @db.Uuid
+  personEntity   Entity  @relation("AuthorOfArticle", fields: [personEntityId], references: [id], onDelete: Cascade)
+  byline         String?
+  authorOrder    Int     @default(0)
+
+  @@unique([articleId, personEntityId])
+  @@index([personEntityId])
+}
+
+model ArticleMention {
+  id              String      @id @default(uuid()) @db.Uuid
+  articleId       String      @db.Uuid
+  article         Article     @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  entityId        String      @db.Uuid
+  entity          Entity      @relation("MentionedInArticle", fields: [entityId], references: [id], onDelete: Cascade)
+  mentionRole     MentionRole @default(SUBJECT)
+  headlineMention Boolean     @default(false)
+  firstSegment    Boolean     @default(false) // mentioned in the first paragraph/segment
+
+  @@unique([articleId, entityId, mentionRole])
+  @@index([entityId])
+}
+
+// ---------------------------------------------------------------- content analysis (sections 4 & 13)
+//
+// Versioned, recomputable analysis results. A row is a snapshot of a pure
+// deterministic computation over the article corpus; identical inputs always
+// produce an identical result (algorithmVersion pins the method).
+enum AnalysisScope {
+  JOURNALIST
+  MEDIA_OUTLET
+  CORPUS
+  TOPIC
+}
+
+enum AnalysisKind {
+  COVERAGE_METRICS
+  PARTY_COVERAGE
+  PERSON_COVERAGE
+  GENRE_DISTRIBUTION
+  TOPIC_DISTRIBUTION
+  COUNTRY_DISTRIBUTION
+  SOURCE_TYPE_DISTRIBUTION
+  FRAMING_DISTRIBUTION
+  MEDIA_COMPARISON
+}
+
+model ContentAnalysis {
+  id                    String        @id @default(uuid()) @db.Uuid
+  scope                 AnalysisScope
+  scopeEntityId         String?       @db.Uuid
+  scopeHash             String        @unique // deterministic key: scope+entity+period+algorithm
+  kind                  AnalysisKind
+  periodStart           DateTime?     @db.Date
+  periodEnd             DateTime?     @db.Date
+  corpusSize            Int           @default(0)
+  articleCount          Int           @default(0)
+  politicsArticleCount  Int           @default(0)
+  algorithm             String        @default("journalist_content_v1")
+  algorithmVersion      String
+  confidenceScore       Float? // coverage robustness 0..1; not a truth score
+  result                Json
+  summary               String?       @db.Text
+  computedAt            DateTime      @default(now())
+  computedFromUpdatedAt DateTime? // latest Article.updatedAt included in the corpus
+
+  @@index([scopeEntityId])
+  @@index([scope, kind])
 }
 
 // ---------------------------------------------------------------- relationships
@@ -205,6 +516,33 @@ enum RelationshipType {
   CLIENT_OF
   DECLARED_EU_INTEREST
   ACCREDITED_REPRESENTATIVE_OF
+  // Journalism & media (Journalistinen tuotanto) — Media & Toimittajat.
+  // WORKED_FOR / PREVIOUSLY_WORKED_FOR / EDITOR_IN_CHIEF_OF describe a
+  // role-holding person; WORKS_FOR is the current-state form and must never be
+  // used for an ended employment (temporal.ts enforces the lifecycle).
+  WORKS_FOR
+  WORKED_FOR
+  PREVIOUSLY_WORKED_FOR
+  EDITOR_OF
+  EDITOR_IN_CHIEF_OF
+  FOUNDED
+  OWNED_BY
+  PARTIALLY_OWNS
+  PUBLISHES
+  PART_OF_MEDIA_GROUP
+  SISTER_PUBLICATION_OF
+  INTERVIEWED
+  CITED
+  CITED_AS_EXPERT
+  WROTE_ABOUT
+  PERSONAL_RELATIONSHIP
+  // Political-affiliation edges for the documented-affiliations graph. These
+  // are separate from PoliticalAffiliation (the strict A/B/C profile model);
+  // both share the temporal + evidence-first rules.
+  POLITICAL_CANDIDATE_FOR
+  WORKED_FOR_PARTY
+  POLITICAL_AIDE_TO
+  RECEIVED_FUNDING_FROM
 }
 
 enum VerificationState {
@@ -243,41 +581,41 @@ enum VerificationStatus {
 }
 
 model Relationship {
-  id               String            @id @default(uuid()) @db.Uuid
-  sourceEntityId   String            @db.Uuid
-  targetEntityId   String            @db.Uuid
-  sourceEntity     Entity            @relation("RelSource", fields: [sourceEntityId], references: [id], onDelete: Cascade)
-  targetEntity     Entity            @relation("RelTarget", fields: [targetEntityId], references: [id], onDelete: Cascade)
-  relationshipType RelationshipType
+  id                    String             @id @default(uuid()) @db.Uuid
+  sourceEntityId        String             @db.Uuid
+  targetEntityId        String             @db.Uuid
+  sourceEntity          Entity             @relation("RelSource", fields: [sourceEntityId], references: [id], onDelete: Cascade)
+  targetEntity          Entity             @relation("RelTarget", fields: [targetEntityId], references: [id], onDelete: Cascade)
+  relationshipType      RelationshipType
   // Temporal model (B.5 Phase 4). startDate/endDate are the canonical
   // validity window (validFrom / validTo). temporalState is derived
   // deterministically at write time by src/lib/temporal.ts.
-  startDate        DateTime?         @db.Date
-  endDate          DateTime?         @db.Date
-  observedAt       DateTime?         // when a source last observed this relationship
-  lastConfirmedAt  DateTime?         // when a source last confirmed it still holds
-  endedReason      String?
-  temporalState    TemporalState     @default(UNKNOWN_PERIOD)
-  amount           Decimal?          @db.Decimal(18, 2)
-  currency         String?
-  percentage       Decimal?          @db.Decimal(6, 2)
-  role             String?
-  description      String?           @db.Text
-  status           EntityStatus      @default(ACTIVE)
-  confidence       Confidence        @default(HIGH)
-  confidenceScore  Float?            // 0.0-1.0; DB CHECK constraint. Not a proof of fact.
-  supportingSourceCount Int          @default(1) // distinct sources corroborating this same edge
-  evidenceStrength String? // "single_source" | "multiple_primary" | ...
-  verificationState VerificationState @default(PUBLISHED)
-  verificationStatus VerificationStatus @default(AUTO_DETECTED)
-  firstSeen        DateTime?         @default(now())
-  lastVerifiedAt   DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  createdBy        String? // agent name or "human"
+  startDate             DateTime?          @db.Date
+  endDate               DateTime?          @db.Date
+  observedAt            DateTime? // when a source last observed this relationship
+  lastConfirmedAt       DateTime? // when a source last confirmed it still holds
+  endedReason           String?
+  temporalState         TemporalState      @default(UNKNOWN_PERIOD)
+  amount                Decimal?           @db.Decimal(18, 2)
+  currency              String?
+  percentage            Decimal?           @db.Decimal(6, 2)
+  role                  String?
+  description           String?            @db.Text
+  status                EntityStatus       @default(ACTIVE)
+  confidence            Confidence         @default(HIGH)
+  confidenceScore       Float? // 0.0-1.0; DB CHECK constraint. Not a proof of fact.
+  supportingSourceCount Int                @default(1) // distinct sources corroborating this same edge
+  evidenceStrength      String? // "single_source" | "multiple_primary" | ...
+  verificationState     VerificationState  @default(PUBLISHED)
+  verificationStatus    VerificationStatus @default(AUTO_DETECTED)
+  firstSeen             DateTime?          @default(now())
+  lastVerifiedAt        DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  createdBy             String? // agent name or "human"
 
-  evidence         Evidence[]
-  changeLogs       ChangeLog[]
+  evidence          Evidence[]
+  changeLogs        ChangeLog[]
   verificationQueue VerificationQueue[]
 
   @@index([sourceEntityId])
@@ -324,8 +662,8 @@ enum FundingType {
 // ISO-3166 country reference (Sprint C Phase 13). A country is filter / origin
 // metadata, never a risk score.
 model Country {
-  iso2      String  @id // "FI", "QA", "CN", ...
-  iso3      String  @unique
+  iso2      String   @id // "FI", "QA", "CN", ...
+  iso3      String   @unique
   name      String
   region    String? // "Europe", "Middle East", "Asia", ...
   createdAt DateTime @default(now())
@@ -352,7 +690,7 @@ model Project {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  flows             FinancialFlow[]
+  flows FinancialFlow[]
 
   @@index([locationCountry])
   @@index([municipality])
@@ -382,45 +720,45 @@ enum FlowType {
 }
 
 model FinancialFlow {
-  id                        String   @id @default(uuid()) @db.Uuid
-  payerEntityId             String   @db.Uuid
-  recipientEntityId         String   @db.Uuid
-  payerEntity               Entity   @relation("FlowPayer", fields: [payerEntityId], references: [id], onDelete: Cascade)
-  recipientEntity           Entity   @relation("FlowRecipient", fields: [recipientEntityId], references: [id], onDelete: Cascade)
-  intermediaryEntityId      String?  @db.Uuid
-  ultimateBeneficiaryEntityId String? @db.Uuid
-  amount                    Decimal  @db.Decimal(18, 2)
-  currency                  String   @default("EUR")
+  id                          String             @id @default(uuid()) @db.Uuid
+  payerEntityId               String             @db.Uuid
+  recipientEntityId           String             @db.Uuid
+  payerEntity                 Entity             @relation("FlowPayer", fields: [payerEntityId], references: [id], onDelete: Cascade)
+  recipientEntity             Entity             @relation("FlowRecipient", fields: [recipientEntityId], references: [id], onDelete: Cascade)
+  intermediaryEntityId        String?            @db.Uuid
+  ultimateBeneficiaryEntityId String?            @db.Uuid
+  amount                      Decimal            @db.Decimal(18, 2)
+  currency                    String             @default("EUR")
   // Sprint C — foreign funding.
-  originalAmount            Decimal? @db.Decimal(18, 2)
-  originalCurrency          String?
+  originalAmount              Decimal?           @db.Decimal(18, 2)
+  originalCurrency            String?
   // Stable per-source record key for multi-record dedup (Sprint C2).
-  externalRecordId         String?  @unique
-  rawFundingType           String? // source's own type label, kept verbatim
-  funderCountryCode         String? // ISO2 of the payer's country; null = unknown
-  recipientCountryCode      String? // ISO2 of the recipient's country
-  isForeign                 Boolean  @default(false) // funder country present and != FI
-  fundingType               FundingType?
-  projectId                 String?  @db.Uuid
-  project                   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  flowDate                  DateTime? @db.Date
-  periodStart               DateTime? @db.Date
-  periodEnd                 DateTime? @db.Date
-  periodYear                Int?
-  flowType                  FlowType
-  purpose                   String?  @db.Text
-  description               String?  @db.Text
-  confidence                Confidence @default(HIGH)
-  confidenceScore           Float?   // 0.0-1.0; DB CHECK constraint.
-  verificationState         VerificationState @default(PUBLISHED)
-  verificationStatus        VerificationStatus @default(AUTO_DETECTED)
-  sourceCount               Int      @default(1)
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  externalRecordId            String?            @unique
+  rawFundingType              String? // source's own type label, kept verbatim
+  funderCountryCode           String? // ISO2 of the payer's country; null = unknown
+  recipientCountryCode        String? // ISO2 of the recipient's country
+  isForeign                   Boolean            @default(false) // funder country present and != FI
+  fundingType                 FundingType?
+  projectId                   String?            @db.Uuid
+  project                     Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  flowDate                    DateTime?          @db.Date
+  periodStart                 DateTime?          @db.Date
+  periodEnd                   DateTime?          @db.Date
+  periodYear                  Int?
+  flowType                    FlowType
+  purpose                     String?            @db.Text
+  description                 String?            @db.Text
+  confidence                  Confidence         @default(HIGH)
+  confidenceScore             Float? // 0.0-1.0; DB CHECK constraint.
+  verificationState           VerificationState  @default(PUBLISHED)
+  verificationStatus          VerificationStatus @default(AUTO_DETECTED)
+  sourceCount                 Int                @default(1)
+  createdAt                   DateTime           @default(now())
+  updatedAt                   DateTime           @updatedAt
 
-  evidence                  Evidence[]
-  changeLogs                ChangeLog[]
-  verificationQueue         VerificationQueue[]
+  evidence          Evidence[]
+  changeLogs        ChangeLog[]
+  verificationQueue VerificationQueue[]
 
   @@index([payerEntityId])
   @@index([recipientEntityId])
@@ -436,19 +774,19 @@ model FinancialFlow {
 // ---------------------------------------------------------------- positions
 
 model Position {
-  id              String        @id @default(uuid()) @db.Uuid
-  personEntityId  String        @db.Uuid
-  personEntity    Entity        @relation("PositionPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
-  organizationEntityId String?  @db.Uuid
-  organizationEntity Entity?    @relation("PositionOrg", fields: [organizationEntityId], references: [id], onDelete: SetNull)
-  role            String
-  startDate       DateTime?     @db.Date
-  endDate         DateTime?     @db.Date
-  isCurrent       Boolean       @default(true)
-  sourceId        String?       @db.Uuid
-  source          Source?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                   String    @id @default(uuid()) @db.Uuid
+  personEntityId       String    @db.Uuid
+  personEntity         Entity    @relation("PositionPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  organizationEntityId String?   @db.Uuid
+  organizationEntity   Entity?   @relation("PositionOrg", fields: [organizationEntityId], references: [id], onDelete: SetNull)
+  role                 String
+  startDate            DateTime? @db.Date
+  endDate              DateTime? @db.Date
+  isCurrent            Boolean   @default(true)
+  sourceId             String?   @db.Uuid
+  source               Source?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([personEntityId])
   @@index([organizationEntityId])
@@ -457,24 +795,32 @@ model Position {
 // ---------------------------------------------------------------- decisions & votes
 
 model Decision {
-  id                String   @id @default(uuid()) @db.Uuid
-  title             String
-  institutionEntityId String? @db.Uuid
-  institutionEntity Entity?  @relation(fields: [institutionEntityId], references: [id], onDelete: SetNull)
-  decisionDate      DateTime? @db.Date
-  decisionType      String?
-  description       String?  @db.Text
-  legalBasis        String?
-  financialValue    Decimal? @db.Decimal(18, 2)
-  currency          String?
-  affectedSectors   String[] @default([])
-  affectedRegions   String[] @default([])
-  sourceId          String?  @db.Uuid
-  source            Source?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  confidence        Confidence @default(HIGH)
-  votes             Vote[]
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                  String     @id @default(uuid()) @db.Uuid
+  title               String
+  institutionEntityId String?    @db.Uuid
+  institutionEntity   Entity?    @relation("InstitutionDecisions", fields: [institutionEntityId], references: [id], onDelete: SetNull)
+  decisionDate        DateTime?  @db.Date
+  decisionType        String?
+  description         String?    @db.Text
+  legalBasis          String?
+  financialValue      Decimal?   @db.Decimal(18, 2)
+  currency            String?
+  affectedSectors     String[]   @default([])
+  affectedRegions     String[]   @default([])
+  sourceId            String?    @db.Uuid
+  source              Source?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  confidence          Confidence @default(HIGH)
+  votes               Vote[]
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  // VAIKUTA module: optional link to a matching DECISION entity (used so
+  // decision authorship can be expressed with ordinary Relationship edges).
+  entityId  String?   @unique @db.Uuid
+  entity    Entity?   @relation("DecisionEntity", fields: [entityId], references: [id], onDelete: SetNull)
+
+  campaigns InfluenceCampaign[]
+  stages    DecisionStage[]
 
   @@index([institutionEntityId])
   @@index([decisionDate])
@@ -488,12 +834,13 @@ enum VoteChoice {
 }
 
 model Vote {
-  id            String      @id @default(uuid()) @db.Uuid
-  decisionId    String      @db.Uuid
-  decision      Decision    @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  id             String     @id @default(uuid()) @db.Uuid
+  decisionId     String     @db.Uuid
+  decision       Decision   @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   personEntityId String     @db.Uuid
-  personEntity  Entity      @relation(fields: [personEntityId], references: [id], onDelete: Cascade)
-  choice        VoteChoice
+  personEntity   Entity     @relation(fields: [personEntityId], references: [id], onDelete: Cascade)
+  choice         VoteChoice
+
   @@unique([decisionId, personEntityId])
   @@index([personEntityId])
 }
@@ -532,30 +879,36 @@ enum SourceType {
 }
 
 model Source {
-  id             String     @id @default(uuid()) @db.Uuid
-  sourceUrl      String
-  sourceName     String
-  publisher      String?
-  publicationDate DateTime? @db.Date
-  retrievedAt    DateTime? @default(now())
-  documentTitle  String?
-  sourceType     SourceType @default(OTHER)
-  confidence     Confidence @default(HIGH)
-  archivedHash   String?
-  parserVersion  String?
-  lastCheckedAt  DateTime?
-  lastChangedAt  DateTime?
+  id                  String     @id @default(uuid()) @db.Uuid
+  sourceUrl           String
+  sourceName          String
+  publisher           String?
+  publicationDate     DateTime?  @db.Date
+  retrievedAt         DateTime?  @default(now())
+  documentTitle       String?
+  sourceType          SourceType @default(OTHER)
+  confidence          Confidence @default(HIGH)
+  archivedHash        String?
+  parserVersion       String?
+  lastCheckedAt       DateTime?
+  lastChangedAt       DateTime?
   // Source health (Phase 15): status + consecutive failure tracking.
-  status            String   @default("ACTIVE") // ACTIVE | DEGRADED | FAILED | DISABLED
-  consecutiveFailures Int   @default(0)
-  lastSuccessAt     DateTime?
-  createdAt      DateTime   @default(now())
+  status              String     @default("ACTIVE") // ACTIVE | DEGRADED | FAILED | DISABLED
+  consecutiveFailures Int        @default(0)
+  lastSuccessAt       DateTime?
+  createdAt           DateTime   @default(now())
 
-  evidence       Evidence[]
-  positions      Position[]
-  decisions      Decision[]
-  events         Event[]
-  agentRuns      AgentRun[]
+  evidence  Evidence[]
+  positions Position[]
+  decisions Decision[]
+  events    Event[]
+  agentRuns AgentRun[]
+  articles  Article[]
+
+  // VAIKUTA module
+  campaignRecipients CampaignRecipient[]
+  vaikutaContacts    VaikutaContactMethod[]
+  decisionStages     DecisionStage[]
 
   @@unique([sourceUrl])
   @@index([sourceType])
@@ -563,21 +916,21 @@ model Source {
 
 // Evidence links a fact (relationship / flow / decision) to its source.
 model Evidence {
-  id               String        @id @default(uuid()) @db.Uuid
-  relationshipId   String?       @db.Uuid
-  relationship     Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
-  flowId           String?       @db.Uuid
-  flow             FinancialFlow? @relation(fields: [flowId], references: [id], onDelete: Cascade)
-  entityId         String?       @db.Uuid
-  entity           Entity?       @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  sourceId         String        @db.Uuid
-  source           Source        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  quotedFragment   String?       @db.Text
-  page             String?
-  documentTitle    String?
-  parserVersion    String?
-  confidence       Confidence    @default(HIGH)
-  createdAt        DateTime      @default(now())
+  id             String         @id @default(uuid()) @db.Uuid
+  relationshipId String?        @db.Uuid
+  relationship   Relationship?  @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  flowId         String?        @db.Uuid
+  flow           FinancialFlow? @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  entityId       String?        @db.Uuid
+  entity         Entity?        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  sourceId       String         @db.Uuid
+  source         Source         @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  quotedFragment String?        @db.Text
+  page           String?
+  documentTitle  String?
+  parserVersion  String?
+  confidence     Confidence     @default(HIGH)
+  createdAt      DateTime       @default(now())
 
   @@index([relationshipId])
   @@index([flowId])
@@ -620,13 +973,13 @@ model IngestionSource {
   lastError           String?         @db.Text
   consecutiveFailures Int             @default(0)
   // Rolling counters from the most recent completed run (Phase 15/16).
-  lastRunDocsChecked   Int            @default(0)
-  lastRunDocsChanged   Int            @default(0)
-  lastRunDurationMs    Int?
+  lastRunDocsChecked  Int             @default(0)
+  lastRunDocsChanged  Int             @default(0)
+  lastRunDurationMs   Int?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
-  documents           SourceDocument[]
+  documents SourceDocument[]
 
   @@index([enabled])
 }
@@ -709,33 +1062,33 @@ enum CandidateStatus {
 }
 
 model RelationshipCandidate {
-  id                     String           @id @default(uuid()) @db.Uuid
-  sourceEntityRef        Json // unresolved EntityRef as proposed
-  targetEntityRef        Json
-  resolvedSourceEntityId String?          @db.Uuid
-  resolvedTargetEntityId String?          @db.Uuid
-  relationshipType       RelationshipType
-  role                   String?
-  amount                 Decimal?         @db.Decimal(18, 2)
-  currency               String?
-  proposedValidFrom      DateTime?        @db.Date
-  proposedValidTo        DateTime?        @db.Date
-  confidenceScore        Float?
-  extractionMethod       String           @default("deterministic-parser") // deterministic-parser | rule | llm | manual
-  extractorVersion       String?
-  sourceDocumentId       String?          @db.Uuid
-  evidenceUrl            String
-  evidenceTitle          String?
-  sourceType             SourceType
-  sourceName             String
-  publisher              String
-  agentRunId             String?          @db.Uuid
-  status                 CandidateStatus  @default(PENDING)
-  publishedRelationshipId String?         @db.Uuid
-  rejectionReason        String?
-  reviewedAt             DateTime?
-  reviewedBy             String?
-  createdAt              DateTime         @default(now())
+  id                      String           @id @default(uuid()) @db.Uuid
+  sourceEntityRef         Json // unresolved EntityRef as proposed
+  targetEntityRef         Json
+  resolvedSourceEntityId  String?          @db.Uuid
+  resolvedTargetEntityId  String?          @db.Uuid
+  relationshipType        RelationshipType
+  role                    String?
+  amount                  Decimal?         @db.Decimal(18, 2)
+  currency                String?
+  proposedValidFrom       DateTime?        @db.Date
+  proposedValidTo         DateTime?        @db.Date
+  confidenceScore         Float?
+  extractionMethod        String           @default("deterministic-parser") // deterministic-parser | rule | llm | manual
+  extractorVersion        String?
+  sourceDocumentId        String?          @db.Uuid
+  evidenceUrl             String
+  evidenceTitle           String?
+  sourceType              SourceType
+  sourceName              String
+  publisher               String
+  agentRunId              String?          @db.Uuid
+  status                  CandidateStatus  @default(PENDING)
+  publishedRelationshipId String?          @db.Uuid
+  rejectionReason         String?
+  reviewedAt              DateTime?
+  reviewedBy              String?
+  createdAt               DateTime         @default(now())
 
   @@index([status])
   @@index([relationshipType])
@@ -801,62 +1154,62 @@ model ReviewAction {
 // ---------------------------------------------------------------- agents & ops
 
 model AgentRun {
-  id              String   @id @default(uuid()) @db.Uuid
-  agent           String
-  startedAt       DateTime @default(now())
-  finishedAt      DateTime?
-  sourceId        String?  @db.Uuid
-  source          Source?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  recordsScanned  Int      @default(0)
-  factsProposed   Int      @default(0)
-  factsAccepted   Int      @default(0)
-  factsRejected   Int      @default(0)
-  recordsCreated  Int      @default(0)
-  recordsUpdated  Int      @default(0)
+  id                 String    @id @default(uuid()) @db.Uuid
+  agent              String
+  startedAt          DateTime  @default(now())
+  finishedAt         DateTime?
+  sourceId           String?   @db.Uuid
+  source             Source?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  recordsScanned     Int       @default(0)
+  factsProposed      Int       @default(0)
+  factsAccepted      Int       @default(0)
+  factsRejected      Int       @default(0)
+  recordsCreated     Int       @default(0)
+  recordsUpdated     Int       @default(0)
   // Collector-framework document counters (Phase 4).
-  documentsChecked   Int   @default(0)
-  documentsNew       Int   @default(0)
-  documentsChanged   Int   @default(0)
-  documentsUnchanged Int   @default(0)
-  errors          Int      @default(0)
-  cost            Decimal? @db.Decimal(10, 4)
-  status          String   @default("RUNNING") // RUNNING | SUCCESS | PARTIAL | FAILED | SKIPPED
-  details         String?  @db.Text
-  metadata        Json?
+  documentsChecked   Int       @default(0)
+  documentsNew       Int       @default(0)
+  documentsChanged   Int       @default(0)
+  documentsUnchanged Int       @default(0)
+  errors             Int       @default(0)
+  cost               Decimal?  @db.Decimal(10, 4)
+  status             String    @default("RUNNING") // RUNNING | SUCCESS | PARTIAL | FAILED | SKIPPED
+  details            String?   @db.Text
+  metadata           Json?
   // Run-lock fields: prevents overlapping runs of the same agent.
-  lockToken       String?  @db.Uuid
-  lockUntil       DateTime?
-  createdAt       DateTime @default(now())
+  lockToken          String?   @db.Uuid
+  lockUntil          DateTime?
+  createdAt          DateTime  @default(now())
 
-  findings        AgentFinding[]
+  findings AgentFinding[]
 
   @@index([agent, startedAt])
   @@index([status, startedAt])
 }
 
 model AgentFinding {
-  id          String    @id @default(uuid()) @db.Uuid
-  runId       String    @db.Uuid
-  run         AgentRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid()) @db.Uuid
+  runId       String   @db.Uuid
+  run         AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   findingType String // RELATIONSHIP_ADDED, POSITION_CHANGED, ...
-  summary     String?   @db.Text
+  summary     String?  @db.Text
   data        Json?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime @default(now())
 }
 
 model VerificationQueue {
-  id              String        @id @default(uuid()) @db.Uuid
-  relationshipId  String?       @db.Uuid
-  relationship    Relationship? @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
-  flowId          String?       @db.Uuid
-  flow            FinancialFlow? @relation(fields: [flowId], references: [id], onDelete: Cascade)
-  entityId        String?       @db.Uuid
-  priority        Int           @default(5)
-  status          String        @default("PENDING") // PENDING | APPROVED | REJECTED
-  reason          String?       @db.Text
-  createdAt       DateTime      @default(now())
-  resolvedAt      DateTime?
-  resolvedBy      String?
+  id             String         @id @default(uuid()) @db.Uuid
+  relationshipId String?        @db.Uuid
+  relationship   Relationship?  @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  flowId         String?        @db.Uuid
+  flow           FinancialFlow? @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  entityId       String?        @db.Uuid
+  priority       Int            @default(5)
+  status         String         @default("PENDING") // PENDING | APPROVED | REJECTED
+  reason         String?        @db.Text
+  createdAt      DateTime       @default(now())
+  resolvedAt     DateTime?
+  resolvedBy     String?
 }
 
 // ---------------------------------------------------------------- change feed
@@ -878,20 +1231,20 @@ enum ChangeEventType {
 }
 
 model ChangeLog {
-  id            String          @id @default(uuid()) @db.Uuid
-  eventType     ChangeEventType
-  entityId      String?         @db.Uuid
-  entity        Entity?         @relation(fields: [entityId], references: [id], onDelete: SetNull)
-  relationshipId String?        @db.Uuid
-  relationship  Relationship?   @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
-  flowId        String?         @db.Uuid
-  flow          FinancialFlow?  @relation(fields: [flowId], references: [id], onDelete: SetNull)
-  sourceId      String?         @db.Uuid
-  description   String?         @db.Text
-  beforeData    Json?
-  afterData     Json?
-  occurredAt    DateTime        @default(now())
-  createdAt     DateTime        @default(now())
+  id             String          @id @default(uuid()) @db.Uuid
+  eventType      ChangeEventType
+  entityId       String?         @db.Uuid
+  entity         Entity?         @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  relationshipId String?         @db.Uuid
+  relationship   Relationship?   @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  flowId         String?         @db.Uuid
+  flow           FinancialFlow?  @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  sourceId       String?         @db.Uuid
+  description    String?         @db.Text
+  beforeData     Json?
+  afterData      Json?
+  occurredAt     DateTime        @default(now())
+  createdAt      DateTime        @default(now())
 
   @@index([occurredAt])
   @@index([entityId])
@@ -909,36 +1262,348 @@ enum CorrectionStatus {
 }
 
 model Correction {
-  id           String           @id @default(uuid()) @db.Uuid
-  entityId     String?          @db.Uuid
-  entity       Entity?          @relation(fields: [entityId], references: [id], onDelete: SetNull)
-  reporter     String?
-  reporterEmail String?
-  category     String // incorrect_person | wrong_relationship | outdated_role | incorrect_amount | missing_source | identity_collision | other
-  description  String?          @db.Text
-  status       CorrectionStatus @default(SUBMITTED)
+  id                String           @id @default(uuid()) @db.Uuid
+  entityId          String?          @db.Uuid
+  entity            Entity?          @relation(fields: [entityId], references: [id], onDelete: SetNull)
+  reporter          String?
+  reporterEmail     String?
+  category          String // incorrect_person | wrong_relationship | outdated_role | incorrect_amount | missing_source | identity_collision | other
+  description       String?          @db.Text
+  status            CorrectionStatus @default(SUBMITTED)
   moderationHistory Json?
-  createdAt    DateTime         @default(now())
-  resolvedAt   DateTime?
+  createdAt         DateTime         @default(now())
+  resolvedAt        DateTime?
+
   @@index([status])
 }
 
 model MethodologyVersion {
-  id        String   @id @default(uuid()) @db.Uuid
-  version   String
-  title     String
-  content   String   @db.Text
+  id          String   @id @default(uuid()) @db.Uuid
+  version     String
+  title       String
+  content     String   @db.Text
   publishedAt DateTime @default(now())
+
   @@unique([version])
 }
 
 model RightOfReply {
-  id          String   @id @default(uuid()) @db.Uuid
-  entityId    String   @db.Uuid
-  entity      Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  responder   String
-  content     String   @db.Text
-  createdAt   DateTime @default(now())
-  isEntityResponse Boolean @default(true)
+  id               String   @id @default(uuid()) @db.Uuid
+  entityId         String   @db.Uuid
+  entity           Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  responder        String
+  content          String   @db.Text
+  createdAt        DateTime @default(now())
+  isEntityResponse Boolean  @default(true)
+
   @@index([entityId])
+}
+
+// ================================================================ VAIKUTA module
+//
+// Vaikuta links the public influence graph to legitimate citizen
+// participation. All recipient relevance is derived from documented,
+// source-backed institutional relationships — never from inferred political
+// beliefs. Money is stored in integer minor units (amountMinor); 1490 = €14.90.
+// No floating point is ever used for money.
+
+enum VaikutaUserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model VaikutaUser {
+  id              String           @id @default(uuid()) @db.Uuid
+  email           String           @unique
+  passwordHash    String
+  emailVerifiedAt DateTime?
+  identityLevel   String           @default("email_verified") // email_verified | strong | organization_verified (future)
+  status          VaikutaUserStatus @default(ACTIVE)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  subscriptions    VaikutaSubscription[]
+  campaigns        InfluenceCampaign[]
+  payments         VaikutaPayment[]
+  checkoutSessions VaikutaCheckoutSession[]
+  events           VaikutaEvent[]
+  verificationTokens VaikutaVerificationToken[]
+
+  @@index([status])
+}
+
+model VaikutaPlan {
+  id                String   @id @default(uuid()) @db.Uuid
+  code              String   @unique // FREE | VAIKUTA_PASS | VAIKUTA_PLUS | VAIKUTA_PRO | ORGANIZATION
+  name              String
+  billingPeriod     String   @default("one_time") // one_time | monthly | yearly
+  priceMinor        Int      @default(0) // integer minor units — never a float
+  currency          String   @default("EUR")
+  recipientLimit    Int? // per-campaign eligible-recipient cap; null = tier default
+  campaignAllowance Int? // per billing period; null = tier default
+  aiAssist          Boolean  @default(true)
+  monitoring        Boolean  @default(false)
+  features          Json? // display line items
+  sortOrder         Int      @default(0)
+  active            Boolean  @default(true)
+  version           Int      @default(1)
+  updatedAt         DateTime @updatedAt
+
+  subscriptions VaikutaSubscription[]
+}
+
+enum VaikutaSubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model VaikutaSubscription {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  userId                 String                    @db.Uuid
+  user                   VaikutaUser               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId                 String                    @db.Uuid
+  plan                   VaikutaPlan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                 VaikutaSubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd       DateTime?
+  provider               String                    @default("mock")
+  providerSubscriptionId String?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  @@index([userId, status])
+}
+
+enum VaikutaCheckoutStatus {
+  CREATED
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+model VaikutaCheckoutSession {
+  id                String                 @id @default(uuid()) @db.Uuid
+  userId            String                 @db.Uuid
+  user              VaikutaUser            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId        String?                @db.Uuid
+  campaign          InfluenceCampaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  planId            String?                @db.Uuid
+  amountMinor       Int                    @default(0)
+  currency          String                 @default("EUR")
+  status            VaikutaCheckoutStatus  @default(CREATED)
+  provider          String                 @default("mock")
+  providerSessionId String?
+  isMock            Boolean                @default(true)
+  completedAt       DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@index([userId, status])
+  @@index([providerSessionId])
+}
+
+enum VaikutaPaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model VaikutaPayment {
+  id                String               @id @default(uuid()) @db.Uuid
+  userId            String               @db.Uuid
+  user              VaikutaUser          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkoutSessionId String?              @db.Uuid
+  amountMinor       Int
+  currency          String               @default("EUR")
+  status            VaikutaPaymentStatus @default(PENDING)
+  provider          String               @default("mock")
+  providerPaymentId String?
+  providerChargeId  String? // Stripe Charge/PaymentIntent id when live
+  receiptUrl        String?
+  isMock            Boolean              @default(true)
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([userId])
+  @@index([checkoutSessionId])
+}
+
+enum VaikutaCampaignStatus {
+  DRAFT
+  RECIPIENTS_SELECTED
+  MESSAGE_READY
+  APPROVED
+  CHECKOUT_READY
+  PAYMENT_COMPLETED
+  DELIVERED
+  CLOSED
+  SUSPENDED
+  REQUIRES_MODERATION
+}
+
+enum VaikutaCampaignDeliveryStatus {
+  PENDING
+  QUEUED
+  ACCEPTED
+  SIMULATED_DELIVERED
+  FAILED
+}
+
+model InfluenceCampaign {
+  id                  String                        @id @default(uuid()) @db.Uuid
+  userId              String                        @db.Uuid
+  user                VaikutaUser                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  decisionId          String                        @db.Uuid
+  decision            Decision                      @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  status              VaikutaCampaignStatus         @default(DRAFT)
+  title               String
+  messageSubject      String?
+  messageBody         String?                       @db.Text
+  approvedAt          DateTime?
+  paymentStatus       VaikutaPaymentStatus?
+  deliveryStatus      VaikutaCampaignDeliveryStatus @default(PENDING)
+  planCode            String                        @default("FREE")
+  planSnapshot        Json?
+  pricingVersion      String?
+  publicVisibility    String                        @default("PRIVATE") // PRIVATE | PUBLIC
+  publicStatement     String?                       @db.Text
+  isDemo              Boolean                       @default(false)
+  abuseFlaggedAt      DateTime?
+  abuseReason         String?                       @db.Text
+  suspendedAt         DateTime?
+  deliveryProvider    String?
+  deliveryProviderState Json?
+  preparedMessageAt   DateTime?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+
+  recipients CampaignRecipient[]
+  events     CampaignEvent[]
+  checkoutSessions VaikutaCheckoutSession[]
+  vaikutaEvents VaikutaEvent[]
+  responses CampaignResponse[]
+
+  @@index([userId, createdAt])
+  @@index([decisionId])
+  @@index([status])
+  @@index([isDemo])
+}
+
+model CampaignRecipient {
+  id                String                       @id @default(uuid()) @db.Uuid
+  campaignId        String                       @db.Uuid
+  campaign          InfluenceCampaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  entityId          String                       @db.Uuid
+  entity            Entity                       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  recipientRole     String?
+  recipientReason   String?
+  relevanceDimension String // committee_membership | vote | chair_of_committee | minister | mp_plenary | media_coverage | official_preparation | formal_authorship
+  isMedia           Boolean                      @default(false)
+  relationshipType  String?
+  sourceId          String?                      @db.Uuid
+  source            Source?                      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  confidence        Confidence                   @default(HIGH)
+  verifiedAt        DateTime?
+  contactMethod     String? // professional_email | official_webform_url | official_address | newsroom_contact | none_available
+  contactAvailability String                     @default("not_verified") // verified | public_professional | not_verified
+  contactVerifiedAt DateTime?
+  deliveryStatus    VaikutaCampaignDeliveryStatus @default(PENDING)
+  responseStatus    String? // reply | awaiting_reply | no_response
+  createdAt         DateTime                     @default(now())
+
+  @@unique([campaignId, entityId])
+  @@index([entityId])
+}
+
+model CampaignEvent {
+  id         String          @id @default(uuid()) @db.Uuid
+  campaignId String          @db.Uuid
+  campaign   InfluenceCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  type       String // created | recipient_added | recipient_removed | message_updated | message_approved | checkout_started | payment_simulated | delivery_simulated | response_recorded | campaign_closed | campaign_suspended | moderation_required
+  metadata   Json?
+  createdAt  DateTime        @default(now())
+
+  @@index([campaignId, createdAt])
+}
+
+model VaikutaEvent {
+  id         String           @id @default(uuid()) @db.Uuid
+  eventType  String // vaikuta_opened | decision_selected | recipient_list_viewed | recipient_selected | message_started | ai_assist_used | preview_opened | checkout_started | mock_checkout_completed | campaign_created | campaign_completed
+  userId     String?          @db.Uuid
+  user       VaikutaUser?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  campaignId String?          @db.Uuid
+  campaign   InfluenceCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  decisionId String?          @db.Uuid
+  metadata   Json? // NEVER full message contents — analytics must stay generic
+  createdAt  DateTime         @default(now())
+
+  @@index([eventType, createdAt])
+  @@index([userId])
+}
+
+model VaikutaContactMethod {
+  id                  String   @id @default(uuid()) @db.Uuid
+  entityId            String   @db.Uuid
+  entity              Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  contactType         String // professional_email | official_webform_url | official_address | newsroom_contact | official_phone
+  value               String // value is ONLY ever a documented public/professional contact
+  label               String?
+  sourceId            String?  @db.Uuid
+  source              Source?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  isPublicProfessional Boolean @default(false)
+  verifiedAt          DateTime?
+  createdAt           DateTime @default(now())
+
+  @@unique([entityId, contactType, value])
+  @@index([entityId])
+}
+
+model VaikutaVerificationToken {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @db.Uuid
+  user      VaikutaUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String      @unique
+  purpose   String      @default("email_verification")
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime    @default(now())
+
+  @@index([userId, purpose])
+}
+
+model CampaignResponse {
+  id                String             @id @default(uuid()) @db.Uuid
+  campaignId        String             @db.Uuid
+  campaign          InfluenceCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipientEntityId String?            @db.Uuid
+  kind              String             @default("delivery") // delivery | reply | manual
+  summary           String?            @db.Text
+  receivedAt        DateTime           @default(now())
+  createdAt         DateTime           @default(now())
+
+  @@index([campaignId, receivedAt])
+}
+
+// Decision timeline used by Vaikuta "Seuraa päätöstä". Dates/sourceId are
+// procedural facts; "next opportunity to influence" is only ever inferred from
+// a documented stage, never manufactured.
+model DecisionStage {
+  id         String   @id @default(uuid()) @db.Uuid
+  decisionId String   @db.Uuid
+  decision   Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  stageType  String // INTRODUCED | COMMITTEE_CONSIDERATION | HEARINGS | COMMITTEE_REPORT | PLENARY_DISCUSSION | VOTE | PRESIDENTIAL_CONFIRMATION | EFFECTIVE | NEXT_OPPORTUNITY
+  label      String
+  date       DateTime? @db.Date
+  detail     String?  @db.Text
+  sourceId   String?  @db.Uuid
+  source     Source?  @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([decisionId, date])
+  @@index([stageType])
 }
