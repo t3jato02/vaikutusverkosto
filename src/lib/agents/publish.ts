@@ -203,8 +203,55 @@ async function upsertRelationship(
     },
   });
   if (existing) {
+    // Phase 7 — cross-source corroboration: attach this source's evidence to the
+    // SAME canonical edge (never a second graph edge). Count distinct sources.
+    const already = await ctx.db.evidence.findFirst({
+      where: { relationshipId: existing.id, sourceId: o.sourceId },
+      select: { id: true },
+    });
+    if (!already) {
+      await ctx.db.evidence.create({
+        data: { relationshipId: existing.id, sourceId: o.sourceId, confidence: o.confidence },
+      });
+      const distinct = await ctx.db.evidence.findMany({
+        where: { relationshipId: existing.id },
+        select: { sourceId: true },
+        distinct: ["sourceId"],
+      });
+      await ctx.db.relationship.update({
+        where: { id: existing.id },
+        data: { supportingSourceCount: distinct.length, lastConfirmedAt: new Date(), observedAt: new Date() },
+      });
+    }
+
     const endChanged = (existing.endDate?.getTime() ?? null) !== (o.endDate?.getTime() ?? null);
     const confChanged = existing.confidence !== o.confidence;
+
+    // Phase 8 — source conflict: a NEW claim that an open-ended relationship has
+    // ended, while another source confirmed it active recently. Don't overwrite;
+    // park a SourceConflict for review.
+    const CONFIRM_WINDOW_MS = 120 * 24 * 60 * 60 * 1000;
+    if (
+      existing.endDate === null &&
+      o.endDate !== null &&
+      existing.lastConfirmedAt &&
+      Date.now() - existing.lastConfirmedAt.getTime() < CONFIRM_WINDOW_MS &&
+      !already
+    ) {
+      await ctx.db.sourceConflict.create({
+        data: {
+          relationshipId: existing.id,
+          entityId: o.sourceEntityId,
+          kind: "ended_vs_active",
+          claimA: { text: "relationship still active (open-ended)", confirmedAt: existing.lastConfirmedAt.toISOString() },
+          claimB: { text: `relationship ended ${o.endDate.toISOString().slice(0, 10)}`, sourceId: o.sourceId, sourceType: o.sourceType },
+        },
+      });
+      ctx.log(`source conflict parked for relationship ${existing.id} (ended vs active)`);
+      ctx.stats.updated++;
+      return "unchanged";
+    }
+
     if (endChanged || confChanged) {
       await ctx.db.relationship.update({
         where: { id: existing.id },

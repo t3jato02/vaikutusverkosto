@@ -269,3 +269,36 @@ export async function rejectCandidate(
   ]);
   return { ok: true };
 }
+
+// ---------------------------------------------------------------- source conflicts
+
+export async function resolveSourceConflict(
+  conflictId: string,
+  action: "resolve" | "dismiss",
+  resolution?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const c = await db.sourceConflict.findUnique({ where: { id: conflictId }, select: { id: true, status: true } });
+  if (!c) return { ok: false, error: "not_found" };
+  await db.$transaction([
+    db.sourceConflict.update({
+      where: { id: conflictId },
+      data: {
+        status: action === "resolve" ? "RESOLVED" : "DISMISSED",
+        resolution: resolution?.slice(0, 2000) ?? null,
+        resolvedBy: "admin",
+        resolvedAt: new Date(),
+      },
+    }),
+    db.reviewAction.create({
+      data: {
+        targetType: "source_conflict",
+        targetId: conflictId,
+        action,
+        beforeData: { status: c.status },
+        afterData: { status: action === "resolve" ? "RESOLVED" : "DISMISSED" },
+        note: resolution?.slice(0, 2000) ?? null,
+      },
+    }),
+  ]);
+  return { ok: true };
+}

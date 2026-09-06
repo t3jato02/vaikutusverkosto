@@ -75,6 +75,7 @@ export default async function AdminReviewPage() {
     }),
     db.reviewAction.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
   ]);
+  const conflicts = await db.sourceConflict.findMany({ where: { status: "OPEN" }, orderBy: { createdAt: "asc" }, take: 30 });
 
   return (
     <div className="space-y-8">
@@ -199,6 +200,32 @@ export default async function AdminReviewPage() {
                     { value: "approve", label: "Vahvista" },
                     { value: "reject", label: "Hylkää" },
                     { value: "stale", label: "Vanhentunut" },
+                  ]}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {conflicts.length > 0 && (
+        <section aria-label="Lähderistiriidat">
+          <h2 className="card-title mb-2">LÄHDERISTIRIIDAT ({conflicts.length})</h2>
+          <ul className="card divide-y divide-ink-100">
+            {conflicts.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
+                <div className="min-w-0">
+                  <span className="font-semibold text-ink-900">{c.kind}</span>
+                  <p className="text-ink-400">
+                    A: {(c.claimA as { text?: string })?.text} · B: {(c.claimB as { text?: string })?.text}
+                  </p>
+                </div>
+                <ActionForm
+                  target="source_conflict"
+                  id={c.id}
+                  actions={[
+                    { value: "resolve", label: "Ratkaistu" },
+                    { value: "dismiss", label: "Ei ristiriitaa" },
                   ]}
                 />
               </li>

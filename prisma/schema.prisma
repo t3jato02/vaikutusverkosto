@@ -256,6 +256,7 @@ model Relationship {
   status           EntityStatus      @default(ACTIVE)
   confidence       Confidence        @default(HIGH)
   confidenceScore  Float?            // 0.0-1.0; DB CHECK constraint. Not a proof of fact.
+  supportingSourceCount Int          @default(1) // distinct sources corroborating this same edge
   evidenceStrength String? // "single_source" | "multiple_primary" | ...
   verificationState VerificationState @default(PUBLISHED)
   verificationStatus VerificationStatus @default(AUTO_DETECTED)
@@ -645,6 +646,26 @@ model RelationshipCandidate {
   @@index([status])
   @@index([relationshipType])
   @@index([sourceDocumentId])
+}
+
+// A genuine contradiction between sources about the same relationship that the
+// temporal resolver could not settle (B.5 Phase 8). Parked for admin review;
+// nothing is auto-treated as an error.
+model SourceConflict {
+  id             String    @id @default(uuid()) @db.Uuid
+  relationshipId String?   @db.Uuid
+  entityId       String?   @db.Uuid
+  kind           String // ended_vs_active | value_mismatch | role_mismatch | other
+  claimA         Json // { text, sourceUrl, sourceName, observedAt }
+  claimB         Json
+  status         String    @default("OPEN") // OPEN | RESOLVED | DISMISSED
+  resolution     String?   @db.Text
+  resolvedBy     String?
+  createdAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+
+  @@index([status])
+  @@index([relationshipId])
 }
 
 // Immutable audit trail for every human review action (Phase 12). Actor is the

@@ -183,6 +183,22 @@ await (async () => {
       if (candidateLeak) throw new Error(`unresolved candidates carrying a published relationship id: ${candidateLeak}`);
       return "no pending candidate published as a fact";
     });
+
+    // B.5 Phase 7/8.
+    const badSupportCount = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Relationship" r
+       WHERE r."supportingSourceCount" < 1
+          OR r."supportingSourceCount" > GREATEST(1, (
+            SELECT count(DISTINCT e."sourceId") FROM "Evidence" e WHERE e."relationshipId" = r.id))`));
+    const orphanConflict = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "SourceConflict" c
+       WHERE c."relationshipId" IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM "Relationship" r WHERE r.id = c."relationshipId")`));
+    step("corroboration integrity", () => {
+      if (badSupportCount) throw new Error(`supportingSourceCount inconsistent with distinct evidence sources: ${badSupportCount}`);
+      if (orphanConflict) throw new Error(`SourceConflict rows referencing a missing relationship: ${orphanConflict}`);
+      return "supportingSourceCount matches distinct evidence sources; no orphan conflicts";
+    });
   } finally {
     await db.$disconnect();
   }
