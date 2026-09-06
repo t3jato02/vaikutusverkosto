@@ -293,6 +293,25 @@ await (async () => {
       if (ownsHistoricalAsCurrent) throw new Error(`ended ownership shown as current: ${ownsHistoricalAsCurrent}`);
       return "transparency + ownership relationships evidenced; no ended ownership shown as current";
     });
+
+    // Journalism & media (Media/Toimittajat) — section 24/35 invariants.
+    const affNoSource = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "PoliticalAffiliation"
+       WHERE "reviewStatus" = 'PUBLISHED'
+         AND ("sourceUrl" IS NULL OR "sourceUrl" !~ '^https?://' OR "evidenceGrade" = 'E')`));
+    const affHumanNotPublished = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "PoliticalAffiliation"
+       WHERE "verificationStatus" = 'HUMAN_VERIFIED' AND "reviewStatus" <> 'PUBLISHED'`));
+    const mediaPersonGraph = await n(await db.$queryRawUnsafe(
+      `SELECT (SELECT count(*) FROM "Relationship" r
+                 WHERE r."relationshipType" = 'PERSONAL_RELATIONSHIP'
+                   AND NOT EXISTS (SELECT 1 FROM "Evidence" e WHERE e."relationshipId" = r.id)) AS count`));
+    step("journalism/affiliation integrity", () => {
+      if (affNoSource) throw new Error(`published political affiliations without a source, or EvidenceGrade E: ${affNoSource}`);
+      if (affHumanNotPublished) throw new Error(`HUMAN_VERIFIED affiliations not marked PUBLISHED: ${affHumanNotPublished}`);
+      if (mediaPersonGraph) throw new Error(`PERSONAL_RELATIONSHIP edges without evidence: ${mediaPersonGraph}`);
+      return "published affiliations sourced + human-only HUMAN_VERIFIED; no un-evidenced personal-relationship edges";
+    });
   } finally {
     await db.$disconnect();
   }
