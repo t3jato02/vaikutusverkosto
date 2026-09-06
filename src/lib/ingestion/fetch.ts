@@ -30,7 +30,14 @@ export interface FetchOptions {
   body?: string;
   timeoutMs?: number;
   maxRetries?: number;
-  /** "json" (default) | "text" | "latin1" (ISO-8859-1 JSON, e.g. Eduskunta). */
+  /**
+   * "json" (default) — decode honoring the response Content-Type charset,
+   *   defaulting to UTF-8 (correct for all known sources, incl. Eduskunta).
+   * "text" — raw text.
+   * "latin1" — force ISO-8859-1 decode. Only for a source PROVEN to serve
+   *   Latin-1; a blind Latin-1 decode of UTF-8 JSON corrupts every non-ASCII
+   *   character. No current adapter needs this.
+   */
   decode?: "json" | "text" | "latin1";
 }
 
@@ -66,6 +73,14 @@ export async function guardedFetch(url: string, opts: FetchOptions = {}): Promis
         const buf = await res.arrayBuffer();
         const text = new TextDecoder("iso-8859-1").decode(buf);
         return { json: JSON.parse(text), mimeType, http };
+      }
+      // Default: honor the declared charset, default UTF-8. `res.json()` already
+      // decodes UTF-8; only re-decode when a non-UTF-8 charset is declared.
+      const cs = /charset\s*=\s*"?([\w-]+)"?/i.exec(mimeType ?? "")?.[1]?.toLowerCase();
+      if (cs && cs !== "utf-8" && cs !== "utf8") {
+        const buf = await res.arrayBuffer();
+        const label = cs === "latin1" || cs === "iso8859-1" ? "iso-8859-1" : cs;
+        return { json: JSON.parse(new TextDecoder(label, { fatal: false }).decode(buf)), mimeType, http };
       }
       return { json: await res.json(), mimeType, http };
     } catch (e) {

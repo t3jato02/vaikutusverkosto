@@ -8,6 +8,7 @@
 // auto-published). Nothing is inferred beyond what the declaration states.
 
 import { EntityType, RelationshipType, SourceType } from "@prisma/client";
+import { fetchJsonRetry } from "./http";
 import type { NormalizedFact, SourceAdapter, SourceDocument } from "./types";
 
 const API = "https://avoindata.eduskunta.fi";
@@ -65,9 +66,7 @@ export const sidonnaisuudetAdapter: SourceAdapter = {
     "ei julkaista automaattisesti. Ei päätellä ilmoitusta laajempaa yhteyttä.",
 
   async discover(): Promise<SourceDocument[]> {
-    const res = await fetch(`${BASE}/seating/`);
-    const buf = await res.arrayBuffer();
-    const rows = JSON.parse(new TextDecoder("iso-8859-1").decode(buf)) as SeatingRow[];
+    const rows = await fetchJsonRetry<SeatingRow[]>(`${BASE}/seating/`);
     return rows
       .filter((r) => r.hetekaId)
       .map((r) => ({
@@ -80,9 +79,7 @@ export const sidonnaisuudetAdapter: SourceAdapter = {
   },
 
   async fetch(_ctx, doc): Promise<unknown> {
-    const res = await fetch(doc.url);
-    const buf = await res.arrayBuffer();
-    return JSON.parse(new TextDecoder("iso-8859-1").decode(buf));
+    return fetchJsonRetry<unknown>(doc.url, { maxRetries: 3 });
   },
 
   async parse(ctx, doc, raw): Promise<NormalizedFact[]> {
