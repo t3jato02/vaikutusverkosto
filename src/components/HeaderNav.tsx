@@ -7,6 +7,7 @@ const NAV = [
   { href: "/explore", label: "Tutki" },
   { href: "/money", label: "Raha" },
   { href: "/foreign", label: "Kv-yhteydet" },
+  { href: "/analytics", label: "Analyysi" },
   { href: "/decisions", label: "Päätökset" },
   { href: "/map", label: "Kartta" },
   { href: "/changes", label: "Muutokset" },

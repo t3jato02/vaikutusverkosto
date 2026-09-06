@@ -34,6 +34,21 @@ function registryRowFromAdapter(a: SourceAdapter) {
 // the scheduler never runs a disabled source.
 const PLANNED_SOURCES = [
   {
+    id: "vnk-state-ownership",
+    name: "Valtion omistajaohjaus — valtion suorat omistukset",
+    publisher: "Valtioneuvoston kanslia (omistajaohjausosasto)",
+    baseUrl: "https://vnk.fi/omistajaohjaus/valtio-omistajana",
+    sourceType: "OFFICIAL_PRIMARY" as const,
+    reliabilityTier: "OFFICIAL_PRIMARY" as const,
+    format: "HTML" as const,
+    updateCadence: "monthly" as const,
+    termsUrl: "https://vnk.fi/tietoa-sivustosta",
+    notes:
+      "Suomen valtion suorat yhtiöomistukset (osuus-% ja tehtäväluokka). Suunniteltu adapteri " +
+      "luo ajallisia OWNS-yhteyksiä: Suomen valtio → yhtiö, evidenssinä virallinen listaus. " +
+      "Tosiasiallisia edunsaajia ei ingestoida (rajoitettu pääsy, ei avointa lähdettä). Ei vielä käytössä.",
+  },
+  {
     id: "eu-transparency-register",
     name: "EU Transparency Register",
     publisher: "European Parliament / European Commission",

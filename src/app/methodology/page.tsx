@@ -91,6 +91,16 @@ export default function MethodologyPage() {
           Venäjä, Kiina, Qatar, Saudi-Arabia, Pohjoismaat) tai organisaatiotyypistä (säätiö,
           kansalaisjärjestö, yritys, uskonnollinen organisaatio, valtio).
         </p>
+        <p className="mt-2">
+          <strong>Vuositieto.</strong> EU FTS -aineistossa &quot;vuosi&quot; on <em>rahoitus- eli
+          budjettivuosi</em>. Hankkeen alkamis- ja päättymispäivät kuvaavat <em>hankekautta</em>.
+          Aineisto ei sisällä erillistä myöntö- tai maksupäivää, joten järjestelmä ei esitä
+          sellaista. Eri vuosien rivit säilytetään erillisinä rahavirtoina.
+        </p>
+        <p className="mt-2">
+          Rahoituslajeja ei lasketa keskenään yhteen ilman selkeää perustetta (avustus, hankinta ja
+          muu on eroteltu). Alkuperäinen sopimustyyppi säilytetään sellaisenaan.
+        </p>
       </Section>
 
       <Section id="network-metrics" title="Verkostomittarit">
