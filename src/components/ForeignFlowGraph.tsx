@@ -79,7 +79,7 @@ export default function ForeignFlowGraph({ query }: { query: string }) {
         </select>
         {loading && <span className="text-ink-400">ladataan…</span>}
       </div>
-      <div className="relative rounded-lg border border-ink-100">
+      <div className="relative max-w-full overflow-hidden rounded-lg border border-ink-100">
         <div ref={ref} className="h-[420px] w-full" role="img" aria-label="Rahavirtojen verkosto" />
         {empty && !loading && (
           <p className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-ink-500">
@@ -95,7 +95,7 @@ export default function ForeignFlowGraph({ query }: { query: string }) {
         ))}
       </div>
       {selected && (
-        <div className="card text-xs">
+        <div className="card break-words text-xs">
           <p className="font-semibold text-ink-900">Rahavirta</p>
           <p className="mt-1 text-ink-600">
             {fmtEur(selected.amount)} {selected.currency}

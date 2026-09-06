@@ -86,7 +86,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       </div>
 
       <section aria-label="Tulokset">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h2 className="card-title">{SCOPES.find((s) => s.value === scope)!.label.toUpperCase()}</h2>
           <details className="text-[11px]">
             <summary className="cursor-pointer text-accent">Miten tämä laskettiin?</summary>
@@ -107,14 +107,14 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           {rows.length === 0 && <li className="py-3 text-sm text-ink-500">Ei dataa tälle verkolle näillä suodattimilla.</li>}
           {rows.map((r, i) => (
             <li key={r.entityId} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-              <span className="min-w-0">
+              <span className="min-w-0 break-words">
                 <span className="mr-2 tabular-nums text-ink-400">{i + 1}.</span>
                 <Link href={entityUrlFor(r.entityId, r.type as EntityType, r.name)} className="font-medium text-accent hover:underline">
                   {r.name}
                 </Link>
                 <span className="ml-2 text-[11px] text-ink-400">{r.type}</span>
               </span>
-              <span className="flex shrink-0 gap-3 text-xs tabular-nums text-ink-500">
+              <span className="flex shrink-0 flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-ink-500">
                 <span>aste {r.degree}</span>
                 <span>{isMoney ? formatEur(r.weightedDegree) : `p. ${r.weightedDegree}`}</span>
                 <span>väl. {r.betweenness}</span>
