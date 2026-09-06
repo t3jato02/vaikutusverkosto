@@ -120,7 +120,7 @@ function ActionForm({
 }
 
 export default async function AdminReviewPage() {
-  const [candidates, relCandidates, autoRels, disputed, corrections, audit] = await Promise.all([
+  const [candidates, relCandidates, autoRels, disputed, corrections, audit, affiliations] = await Promise.all([
     db.entityResolutionCandidate.findMany({ where: { status: "PENDING" }, orderBy: { createdAt: "asc" }, take: 50 }),
     db.relationshipCandidate.findMany({
       where: { status: { in: ["PENDING", "NEEDS_REVIEW", "AUTO_ACCEPTABLE"] } },
@@ -152,6 +152,15 @@ export default async function AdminReviewPage() {
       include: { entity: { select: { id: true, canonicalName: true, type: true } } },
     }),
     db.reviewAction.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
+    db.politicalAffiliation.findMany({
+      where: { reviewStatus: "PENDING_REVIEW" },
+      orderBy: { createdAt: "asc" },
+      take: 30,
+      include: {
+        personEntity: { select: { id: true, canonicalName: true } },
+        partyEntity: { select: { id: true, canonicalName: true } },
+      },
+    }),
   ]);
   const conflicts = await db.sourceConflict.findMany({ where: { status: "OPEN" }, orderBy: { createdAt: "asc" }, take: 30 });
   const reviewCandidates = await buildReviewCandidates(relCandidates);
@@ -284,6 +293,40 @@ export default async function AdminReviewPage() {
           </ul>
         </section>
       )}
+
+      <section aria-label="Poliittiset sidokset">
+        <h2 className="card-title mb-2">POLIITTISET SIDOKSET ODOTTAA TARKISTUSTA ({affiliations.length})</h2>
+        <p className="mb-2 text-[11px] text-ink-500">
+          Vain tarkastaja voi julkaista puoluesidoksen (reviewStatus=PUBLISHED, verification=HUMAN_VERIFIED).
+          Agentti ei voi laittaa näitä tilaan HUMAN_VERIFIED eikä sisältöanalyysi voi tuottaa näitä rivejä ollenkaan.
+        </p>
+        <ul className="card divide-y divide-ink-100">
+          {affiliations.length === 0 && <li className="py-3 text-sm text-ink-500">Ei odottavia sidoksia.</li>}
+          {affiliations.map((a) => (
+            <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
+              <div className="min-w-0">
+                <span className="font-semibold text-ink-900">{a.personEntity.canonicalName}</span>
+                <span className="text-ink-500"> · {a.affiliationType}</span>
+                {a.partyEntity ? <span className="text-ink-500"> · {a.partyEntity.canonicalName}</span> : null}
+                {a.role ? <span className="text-ink-500"> · {a.role}</span> : null}
+                <p className="text-ink-400">
+                  {a.startYear ?? "?"}–{a.endYear ?? "?"} · {a.selfReported ? "henkilön itsensä ilmoittama" : "dokumentoitu"} ·{" "}
+                  <a href={a.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">lähde</a> · {a.description.slice(0, 90)}
+                </p>
+              </div>
+              <ActionForm
+                target="affiliation"
+                id={a.id}
+                actions={[
+                  { value: "approve", label: "Julkaise (HUMAN_VERIFIED)" },
+                  { value: "dispute", label: "Riitauta" },
+                  { value: "reject", label: "Hylkää" },
+                ]}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section aria-label="Korjauspyynnöt">
         <h2 className="card-title mb-2">KORJAUSPYYNNÖT</h2>
