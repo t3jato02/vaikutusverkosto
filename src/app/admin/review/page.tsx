@@ -3,7 +3,85 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { entityUrlFor } from "@/lib/queries";
 import { relationshipLabel } from "@/lib/constants";
+import { relationshipPhrase, temporalLabel, verificationLabel } from "@/lib/labels";
 import { formatDateLong } from "@/lib/format";
+import CandidateReviewPanel, { type ReviewCandidate } from "@/components/admin/CandidateReviewPanel";
+import type { RelationshipType } from "@prisma/client";
+
+/** Build the rich per-candidate context the review panel renders. */
+async function buildReviewCandidates(
+  rows: Awaited<ReturnType<typeof db.relationshipCandidate.findMany>>,
+): Promise<ReviewCandidate[]> {
+  const entityIds = [
+    ...new Set(rows.flatMap((c) => [c.resolvedSourceEntityId, c.resolvedTargetEntityId].filter(Boolean) as string[])),
+  ];
+  const entities = entityIds.length
+    ? await db.entity.findMany({ where: { id: { in: entityIds } }, select: { id: true, canonicalName: true } })
+    : [];
+  const nameOf = new Map(entities.map((e) => [e.id, e.canonicalName]));
+
+  // Existing relationships between any candidate pair (both directions).
+  const pairs = rows
+    .filter((c) => c.resolvedSourceEntityId && c.resolvedTargetEntityId)
+    .map((c) => [c.resolvedSourceEntityId!, c.resolvedTargetEntityId!] as const);
+  const existingRels = pairs.length
+    ? await db.relationship.findMany({
+        where: {
+          OR: pairs.flatMap(([a, b]) => [
+            { sourceEntityId: a, targetEntityId: b },
+            { sourceEntityId: b, targetEntityId: a },
+          ]),
+        },
+        select: {
+          sourceEntityId: true,
+          targetEntityId: true,
+          relationshipType: true,
+          temporalState: true,
+          verificationStatus: true,
+          verificationState: true,
+        },
+      })
+    : [];
+
+  return rows.map((c): ReviewCandidate => {
+    const srcRef = c.sourceEntityRef as { name?: string } | null;
+    const tgtRef = c.targetEntityRef as { name?: string } | null;
+    const sName = (c.resolvedSourceEntityId && nameOf.get(c.resolvedSourceEntityId)) || srcRef?.name || "?";
+    const tName = (c.resolvedTargetEntityId && nameOf.get(c.resolvedTargetEntityId)) || tgtRef?.name || "?";
+    const bothResolved = Boolean(c.resolvedSourceEntityId && c.resolvedTargetEntityId);
+    const between = existingRels.filter(
+      (r) =>
+        (r.sourceEntityId === c.resolvedSourceEntityId && r.targetEntityId === c.resolvedTargetEntityId) ||
+        (r.sourceEntityId === c.resolvedTargetEntityId && r.targetEntityId === c.resolvedSourceEntityId),
+    );
+    const duplicate = between.some((r) => r.relationshipType === c.relationshipType && r.verificationState === "PUBLISHED");
+    const conflict = between.some((r) => r.verificationStatus === "DISPUTED");
+    return {
+      id: c.id,
+      sourceName: sName,
+      targetName: tName,
+      relationshipLabel: relationshipPhrase(c.relationshipType, "out"),
+      relationshipType: c.relationshipType,
+      role: c.role,
+      confidenceScore: c.confidenceScore,
+      extractionMethod: c.extractionMethod,
+      extractorVersion: c.extractorVersion,
+      sourceLabel: `${c.sourceName} · ${c.publisher}`,
+      evidenceUrl: c.evidenceUrl,
+      evidenceTitle: c.evidenceTitle,
+      bothResolved,
+      duplicate,
+      conflict,
+      existing: between.map((r) => ({
+        label: relationshipPhrase(r.relationshipType as RelationshipType, "out"),
+        temporal: temporalLabel(r.temporalState),
+        verification: verificationLabel(r.verificationStatus).label,
+      })),
+      groupKey: `${c.sourceName} · ${c.relationshipType} · ${c.extractionMethod}${c.extractorVersion ? ` ${c.extractorVersion}` : ""}`,
+      batchSafe: c.extractionMethod === "deterministic-parser" && bothResolved && !duplicate && !conflict,
+    };
+  });
+}
 
 export const metadata: Metadata = { title: "Tarkistusjono" };
 export const dynamic = "force-dynamic";
@@ -76,6 +154,7 @@ export default async function AdminReviewPage() {
     db.reviewAction.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
   ]);
   const conflicts = await db.sourceConflict.findMany({ where: { status: "OPEN" }, orderBy: { createdAt: "asc" }, take: 30 });
+  const reviewCandidates = await buildReviewCandidates(relCandidates);
 
   return (
     <div className="space-y-8">
@@ -113,39 +192,11 @@ export default async function AdminReviewPage() {
         <h2 className="card-title mb-2">SUHDE-EHDOKKAAT ({relCandidates.length})</h2>
         <p className="mb-2 text-[11px] text-ink-500">
           Ei-deterministiset tai toissijaiset lähteet päätyvät ehdokkaiksi eivätkä suoraan
-          julkaistuiksi suhteiksi. Hyväksyntä luo suhteen tilassa HUMAN_VERIFIED.
+          julkaistuiksi suhteiksi. Hyväksyntä luo suhteen tilassa HUMAN_VERIFIED. Ryhmähyväksyntä
+          on sallittu vain ryhmille, joissa jokainen ehdokas täyttää täsmälleen samat
+          deterministiset ehdot (parseri, entiteetit ratkaistu, ei duplikaattia, ei konfliktia).
         </p>
-        <ul className="card divide-y divide-ink-100">
-          {relCandidates.length === 0 && <li className="py-3 text-sm text-ink-500">Ei ehdokkaita.</li>}
-          {relCandidates.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
-              <div className="min-w-0">
-                <span className="font-semibold text-ink-900">
-                  {(c.sourceEntityRef as { name?: string })?.name ?? c.resolvedSourceEntityId?.slice(0, 8)}
-                </span>
-                <span className="text-ink-500"> {relationshipLabel(c.relationshipType)} </span>
-                <span className="font-semibold text-ink-900">
-                  {(c.targetEntityRef as { name?: string })?.name ?? c.resolvedTargetEntityId?.slice(0, 8)}
-                </span>
-                <p className="text-ink-400">
-                  {c.extractionMethod}
-                  {c.extractorVersion ? ` ${c.extractorVersion}` : ""} · luottamus {c.confidenceScore ?? "?"} ·{" "}
-                  <a href={c.evidenceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">lähde</a> ·{" "}
-                  {c.status}
-                  {!c.resolvedSourceEntityId || !c.resolvedTargetEntityId ? " · entiteetit ratkaisematta" : ""}
-                </p>
-              </div>
-              <ActionForm
-                target="relationship_candidate"
-                id={c.id}
-                actions={[
-                  { value: "approve", label: "Hyväksy → HUMAN_VERIFIED" },
-                  { value: "reject", label: "Hylkää" },
-                ]}
-              />
-            </li>
-          ))}
-        </ul>
+        <CandidateReviewPanel candidates={reviewCandidates} />
       </section>
 
       <section aria-label="Vahvistamattomat suhteet">
