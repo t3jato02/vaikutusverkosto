@@ -5,6 +5,8 @@ import { entityUrlFor } from "@/lib/queries";
 import { formatEur } from "@/lib/format";
 import { foreignFundingOverview, buildForeignFundingWhere, type ForeignFundingFilters } from "@/lib/foreign";
 import { FLOW_TYPE_LABELS } from "@/lib/constants";
+import { formatDateLong } from "@/lib/format";
+import ForeignFlowGraph from "@/components/ForeignFlowGraph";
 
 export const metadata: Metadata = {
   title: "Kansainväliset yhteydet",
@@ -116,8 +118,25 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
         </ul>
       </section>
 
+      {flows.length > 0 && (
+        <section aria-label="Rahavirtojen verkosto">
+          <h2 className="card-title mb-2">RAHAVIRTOJEN VERKOSTO</h2>
+          <p className="mb-2 text-[11px] text-ink-500">
+            Maa → rahoittaja → (välittäjä) → suomalainen saaja → hanke. Klikkaa viivaa nähdäksesi
+            summan ja lähteet. Verkosto on rajattu; laajenna listalta.
+          </p>
+          <ForeignFlowGraph
+            query={[
+              sp.country ? `country=${encodeURIComponent(sp.country)}` : "",
+              sp.fundingType ? `fundingType=${encodeURIComponent(sp.fundingType)}` : "",
+              sp.minAmount ? `minAmount=${encodeURIComponent(sp.minAmount)}` : "",
+            ].filter(Boolean).join("&")}
+          />
+        </section>
+      )}
+
       <section aria-label="Rahavirrat">
-        <h2 className="card-title mb-2">RAHAVIRRAT</h2>
+        <h2 className="card-title mb-2">RAHAVIRRAT ({flows.length})</h2>
         <ul className="card divide-y divide-ink-100">
           {flows.length === 0 && <li className="py-3 text-sm text-ink-500">Ei tuloksia näillä suodattimilla.</li>}
           {flows.map((f) => (
@@ -137,13 +156,29 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
               </div>
               <p className="mt-0.5 text-[11px] text-ink-500">
                 {f.fundingType ?? f.flowType}
+                {f.rawFundingType ? ` (${f.rawFundingType})` : ""}
                 {f.funderCountryCode ? ` · ${countryName.get(f.funderCountryCode) ?? f.funderCountryCode}` : ""}
                 {f.project ? ` · hanke: ${f.project.name}` : ""}
-                {f.periodYear ? ` · ${f.periodYear}` : ""} · {f.verificationStatus}
-                {f.evidence[0]?.source && (
-                  <> · <a href={f.evidence[0].source.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">lähde</a></>
-                )}
+                {f.periodYear ? ` · ${f.periodYear}` : ""} · {f.verificationStatus} · {f.sourceCount} lähde(ttä)
               </p>
+              {f.evidence.length > 0 && (
+                <details className="mt-1 text-[11px]">
+                  <summary className="cursor-pointer text-accent">Todisteet ({f.evidence.length})</summary>
+                  <ul className="mt-1 space-y-1 pl-3">
+                    {f.evidence.map((e) => (
+                      <li key={e.id} className="text-ink-500">
+                        <a href={e.source.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                          {e.source.sourceName}
+                        </a>{" "}
+                        · {e.source.publisher ?? "—"}
+                        {e.source.publicationDate ? ` · julkaistu ${formatDateLong(e.source.publicationDate)}` : ""}
+                        {e.source.retrievedAt ? ` · haettu ${formatDateLong(e.source.retrievedAt)}` : ""}
+                        {e.quotedFragment ? <span className="block italic">&ldquo;{e.quotedFragment}&rdquo;</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </li>
           ))}
         </ul>

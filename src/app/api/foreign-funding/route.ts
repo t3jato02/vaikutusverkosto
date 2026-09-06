@@ -32,6 +32,10 @@ export async function GET(req: Request) {
   if (view === "overview") {
     return NextResponse.json(await foreignFundingOverview(filters));
   }
+  if (view === "graph") {
+    const { foreignFundingGraph } = await import("@/lib/foreign");
+    return NextResponse.json(await foreignFundingGraph({ ...filters, limit: num("limit") ?? 100 }));
+  }
 
   const page = Math.max(Number(sp.get("page") ?? 1), 1);
   const perPage = Math.min(Number(sp.get("per_page") ?? 50), 100);

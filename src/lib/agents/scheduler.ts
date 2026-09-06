@@ -64,6 +64,11 @@ export function runOptionsFor(sourceId: string): { concurrency: number; maxDocsP
       return { concurrency: 6, maxDocsPerTick: 25 };
     case "prh-agent":
       return { concurrency: 4, maxDocsPerTick: 15 };
+    case "sidonnaisuudet-agent":
+      return { concurrency: 6, maxDocsPerTick: 25 };
+    case "eu-fts-agent":
+      // Records are pre-gathered in discovery; publishing is the cost.
+      return { concurrency: 3, maxDocsPerTick: 200 };
     default:
       return { concurrency: 2, maxDocsPerTick: 2 };
   }

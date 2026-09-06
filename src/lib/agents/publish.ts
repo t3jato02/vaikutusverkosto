@@ -174,12 +174,52 @@ export async function publishVerifiedFact(
   }
 
   // flow
+  // Optional project link (Sprint C2) — deduped by source project identifier.
+  let projectId: string | null = null;
+  if (fact.projectRef?.name) {
+    const pr = fact.projectRef;
+    if (pr.sourceIdentifier) {
+      const p = await db.project.upsert({
+        where: { sourceIdentifier: pr.sourceIdentifier },
+        update: {
+          name: pr.name,
+          programme: pr.programme ?? undefined,
+          description: pr.description ?? undefined,
+          startDate: pr.startDate ?? undefined,
+          endDate: pr.endDate ?? undefined,
+          locationCountry: pr.locationCountry ?? undefined,
+          municipality: pr.municipality ?? undefined,
+          funderEntityId: src.entityId,
+        },
+        create: {
+          sourceIdentifier: pr.sourceIdentifier,
+          name: pr.name,
+          programme: pr.programme ?? null,
+          description: pr.description ?? null,
+          startDate: pr.startDate ?? null,
+          endDate: pr.endDate ?? null,
+          locationCountry: pr.locationCountry ?? null,
+          municipality: pr.municipality ?? null,
+          locationPrecision: pr.municipality ? "MUNICIPALITY" : pr.locationCountry ? "COUNTRY" : "COUNTRY",
+          funderEntityId: src.entityId,
+        },
+        select: { id: true },
+      });
+      projectId = p.id;
+    }
+  }
   const flow = await upsertFlow(ctx, {
     payerEntityId: src.entityId,
     recipientEntityId: tgt.entityId,
     amount: fact.amount!,
     currency: fact.currency!,
     flowType: fact.flowType!,
+    fundingTypeOverride: fact.fundingType ?? null,
+    rawFundingType: fact.rawFundingType ?? null,
+    externalRecordId: fact.externalRecordId ?? null,
+    funderCountryCodeOverride: fact.funderCountryCode ?? null,
+    recipientCountryCodeOverride: fact.recipientCountryCode ?? null,
+    projectId,
     flowDate: fact.startDate ?? null,
     periodStart: fact.periodStart ?? fact.startDate ?? null,
     periodEnd: fact.periodEnd ?? fact.endDate ?? null,
@@ -350,6 +390,12 @@ async function upsertFlow(
     amount: number;
     currency: string;
     flowType: FlowType;
+    fundingTypeOverride?: FundingType | null;
+    rawFundingType?: string | null;
+    externalRecordId?: string | null;
+    funderCountryCodeOverride?: string | null;
+    recipientCountryCodeOverride?: string | null;
+    projectId?: string | null;
     flowDate: Date | null;
     periodStart: Date | null;
     periodEnd: Date | null;
@@ -360,15 +406,28 @@ async function upsertFlow(
     sourceId: string;
   },
 ): Promise<"created" | "updated" | "unchanged"> {
-  const existing = await ctx.db.financialFlow.findFirst({
-    where: {
-      payerEntityId: o.payerEntityId,
-      recipientEntityId: o.recipientEntityId,
-      flowType: o.flowType,
-      periodYear: o.periodYear ?? null,
-    },
-  });
+  // Dedup: a stable per-source record id (multi-record sources like EU FTS) wins;
+  // otherwise fall back to the coarse (payer, recipient, type, year) key.
+  const existing = o.externalRecordId
+    ? await ctx.db.financialFlow.findUnique({ where: { externalRecordId: o.externalRecordId } })
+    : await ctx.db.financialFlow.findFirst({
+        where: {
+          payerEntityId: o.payerEntityId,
+          recipientEntityId: o.recipientEntityId,
+          flowType: o.flowType,
+          periodYear: o.periodYear ?? null,
+        },
+      });
   if (existing) {
+    // Attach this source's evidence to the same flow (corroboration).
+    const already = await ctx.db.evidence.findFirst({
+      where: { flowId: existing.id, sourceId: o.sourceId },
+      select: { id: true },
+    });
+    if (!already) {
+      await ctx.db.evidence.create({ data: { flowId: existing.id, sourceId: o.sourceId, confidence: o.confidence } });
+      await ctx.db.financialFlow.update({ where: { id: existing.id }, data: { sourceCount: { increment: 1 } } });
+    }
     const changed = Number(existing.amount) !== o.amount;
     if (changed) {
       await ctx.db.financialFlow.update({
@@ -403,7 +462,8 @@ async function upsertFlow(
     if (s.startsWith("FI") || s === "SUOMI" || s === "FINLAND") return "FI";
     return null;
   };
-  const funderCountryCode = cc(payer);
+  const funderCountryCode = o.funderCountryCodeOverride ?? cc(payer);
+  const recipientCountryCode = o.recipientCountryCodeOverride ?? cc(recipient);
   const flow = await ctx.db.financialFlow.create({
     data: {
       payerEntityId: o.payerEntityId,
@@ -411,9 +471,12 @@ async function upsertFlow(
       amount: o.amount,
       currency: o.currency,
       flowType: o.flowType,
-      fundingType: mapFundingType(o.flowType),
+      fundingType: o.fundingTypeOverride ?? mapFundingType(o.flowType),
+      rawFundingType: o.rawFundingType ?? null,
+      externalRecordId: o.externalRecordId ?? null,
+      projectId: o.projectId ?? null,
       funderCountryCode,
-      recipientCountryCode: cc(recipient),
+      recipientCountryCode,
       isForeign: Boolean(funderCountryCode) && funderCountryCode !== "FI",
       flowDate: o.flowDate,
       periodStart: o.periodStart,

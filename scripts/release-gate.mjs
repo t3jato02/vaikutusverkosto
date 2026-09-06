@@ -225,6 +225,31 @@ await (async () => {
       if (foreignFlagWrong) throw new Error(`isForeign flag inconsistent with funderCountryCode: ${foreignFlagWrong}`);
       return "valid ISO country codes, no orphan project, foreign flows evidenced, isForeign consistent";
     });
+
+    // Sprint C2 — multi-record source + semantic-safety invariants (Phase 36).
+    const dupRecordId = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM (
+         SELECT "externalRecordId" FROM "FinancialFlow"
+         WHERE "externalRecordId" IS NOT NULL
+         GROUP BY "externalRecordId" HAVING count(*) > 1) d`));
+    const orphanEvidence = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "Evidence" e
+       WHERE e."sourceId" IS NULL
+          OR NOT EXISTS (SELECT 1 FROM "Source" s WHERE s.id = e."sourceId")
+          OR (e."flowId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "FinancialFlow" f WHERE f.id = e."flowId"))
+          OR (e."relationshipId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Relationship" r WHERE r.id = e."relationshipId"))`));
+    // No foreign funding flow may terminate on a natural person (organisation
+    // funding must never be synthesised into a direct person-funding edge).
+    const foreignFlowToPerson = await n(await db.$queryRawUnsafe(
+      `SELECT count(*) AS count FROM "FinancialFlow" f
+       JOIN "Entity" e ON e.id = f."recipientEntityId"
+       WHERE f."isForeign" = true AND e."type" = 'PERSON'`));
+    step("multi-record + semantic-safety integrity", () => {
+      if (dupRecordId) throw new Error(`duplicate externalRecordId: ${dupRecordId}`);
+      if (orphanEvidence) throw new Error(`orphan Evidence rows: ${orphanEvidence}`);
+      if (foreignFlowToPerson) throw new Error(`foreign funding flows terminating on a PERSON: ${foreignFlowToPerson}`);
+      return "unique external record ids, no orphan evidence, no foreign flow to a person";
+    });
   } finally {
     await db.$disconnect();
   }
