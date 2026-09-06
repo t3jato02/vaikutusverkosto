@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { EntityType } from "@prisma/client";
 import { entityUrlFor } from "@/lib/queries";
+import { entityLabel } from "@/lib/constants";
 import { formatEur } from "@/lib/format";
 import { networkAnalytics, type GraphScope, type Temporal } from "@/lib/analytics";
 
@@ -149,7 +150,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 <Link href={entityUrlFor(r.entityId, r.type as EntityType, r.name)} className="font-medium text-accent hover:underline">
                   {r.name}
                 </Link>
-                <span className="ml-2 text-[11px] text-ink-400">{r.type}</span>
+                <span className="ml-2 text-[11px] text-ink-400">{entityLabel(r.type as EntityType)}</span>
               </span>
               <span className="flex shrink-0 flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-ink-500">
                 <span title="Yhteyksien määrä verkossa">{r.degree} yhteyttä</span>

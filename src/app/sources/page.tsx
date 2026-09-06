@@ -1,5 +1,7 @@
 import { getSources, getLatestAgentRuns } from "@/lib/queries";
 import { formatDateLong } from "@/lib/format";
+import { runStatusLabel } from "@/lib/labels";
+import { sourceTypeLabel } from "@/components/SourceLink";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,7 @@ export default async function SourcesPage() {
                 {r.source?.sourceName ?? "—"} · {r.recordsScanned} tietuetta · {r.factsAccepted} hyväksytty · {r.errors} virhettä
               </span>
               <span className={`shrink-0 font-medium ${r.status === "SUCCESS" ? "text-emerald-600" : r.status === "PARTIAL" ? "text-amber-600" : "text-red-600"}`}>
-                {r.status}
+                {runStatusLabel(r.status)}
               </span>
             </li>
           ))}
@@ -45,7 +47,7 @@ export default async function SourcesPage() {
                 <span className="block truncate text-[11px] text-ink-300">{s.sourceUrl}</span>
               </div>
               <div className="flex min-w-0 basis-full flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500 sm:flex-1 sm:justify-end">
-                <span className="min-w-0 break-words rounded bg-ink-100 px-1.5 py-0.5 text-[11px]">{s.sourceType}</span>
+                <span className="min-w-0 break-words rounded bg-ink-100 px-1.5 py-0.5 text-[11px]">{sourceTypeLabel(s.sourceType)}</span>
                 <span className="whitespace-nowrap">{s._count.evidence} todistetta</span>
                 <span className="whitespace-nowrap" title={formatDateLong(s.lastCheckedAt)}>tark. {formatDateLong(s.lastCheckedAt)}</span>
               </div>
