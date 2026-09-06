@@ -29,6 +29,40 @@ function registryRowFromAdapter(a: SourceAdapter) {
   };
 }
 
+// International sources whose adapters are not built yet (Sprint C Phase 12).
+// Registered DISABLED so they appear in the registry with a documented plan;
+// the scheduler never runs a disabled source.
+const PLANNED_SOURCES = [
+  {
+    id: "eu-fts",
+    name: "EU Financial Transparency System",
+    publisher: "European Commission — DG Budget",
+    baseUrl: "https://ec.europa.eu/budget/financial-transparency-system/",
+    sourceType: "OFFICIAL_REGISTER" as const,
+    reliabilityTier: "OFFICIAL_REGISTER" as const,
+    format: "PDF" as const, // annual XLSX/CSV downloads
+    updateCadence: "monthly" as const,
+    termsUrl: "https://ec.europa.eu/info/legal-notice_en",
+    notes:
+      "EU:n suorien avustusten ja hankintojen vuosiaineistot (XLSX/CSV). Adapteri vaatii " +
+      "XLSX-jäsentimen + vuosikohtaisen latauksen. Ei vielä käytössä.",
+  },
+  {
+    id: "eu-transparency-register",
+    name: "EU Transparency Register",
+    publisher: "European Parliament / European Commission",
+    baseUrl: "https://ec.europa.eu/transparencyregister/public/",
+    sourceType: "OFFICIAL_REGISTER" as const,
+    reliabilityTier: "OFFICIAL_REGISTER" as const,
+    format: "API" as const,
+    updateCadence: "monthly" as const,
+    termsUrl: "https://ec.europa.eu/transparencyregister/public/staticPage/displayStaticPage.do?locale=en&reference=WHY_TRANSPARENCY_REGISTER",
+    notes:
+      "EU:n avoimuusrekisteri (edunvalvojat, rahoitus, asiakkaat). JSON/CSV-vienti saatavilla. " +
+      "Adapteri suunnitteilla. Ei vielä käytössä.",
+  },
+] as const;
+
 /**
  * Upsert one registry row per registered adapter. Idempotent: descriptive
  * fields are refreshed from code; operational fields (enabled, health) are
@@ -36,6 +70,13 @@ function registryRowFromAdapter(a: SourceAdapter) {
  */
 export async function syncRegistry(client: PrismaClient = db): Promise<number> {
   const adapters = listAdapters();
+  for (const p of PLANNED_SOURCES) {
+    await client.ingestionSource.upsert({
+      where: { id: p.id },
+      update: { name: p.name, publisher: p.publisher, baseUrl: p.baseUrl, notes: p.notes, termsUrl: p.termsUrl },
+      create: { ...p, adapter: "", enabled: false },
+    });
+  }
   for (const a of adapters) {
     const row = registryRowFromAdapter(a);
     await client.ingestionSource.upsert({

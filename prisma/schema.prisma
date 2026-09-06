@@ -71,6 +71,8 @@ model Entity {
   municipality   String?
   region         String?
   country        String?
+  countryCode    String? // ISO-3166 alpha-2 (Sprint C)
+  entityCategory EntityCategory? // institutional classification (Sprint C)
   officialUrls   String[]     @default([])
   sourceCount    Int          @default(0)
   confidence     Confidence   @default(HIGH)
@@ -102,6 +104,8 @@ model Entity {
   @@index([type, status])
   @@index([municipality])
   @@index([country])
+  @@index([countryCode])
+  @@index([entityCategory])
 }
 
 model Person {
@@ -280,6 +284,69 @@ model Relationship {
 
 // ---------------------------------------------------------------- money flows
 
+// Institutional classification (Sprint C Phase 9). Independent of country /
+// creed / nationality — those are never risk signals.
+enum EntityCategory {
+  GOVERNMENT
+  GOVERNMENT_AGENCY
+  STATE_OWNED_COMPANY
+  COMPANY
+  FOUNDATION
+  NGO
+  RELIGIOUS_ORGANIZATION
+  THINK_TANK
+  UNIVERSITY
+  INTERNATIONAL_ORGANIZATION
+  POLITICAL_PARTY
+  MEDIA_ORGANIZATION
+  OTHER
+}
+
+// Nature of a financial flow (Sprint C Phase 10). Not "influence" — a flow is
+// funding / a contract / an investment, described neutrally.
+enum FundingType {
+  GRANT
+  DONATION
+  INVESTMENT
+  PROCUREMENT
+  LOAN
+  SPONSORSHIP
+  MEMBERSHIP_FEE
+  OTHER
+}
+
+// ISO-3166 country reference (Sprint C Phase 13). A country is filter / origin
+// metadata, never a risk score.
+model Country {
+  iso2      String  @id // "FI", "QA", "CN", ...
+  iso3      String  @unique
+  name      String
+  region    String? // "Europe", "Middle East", "Asia", ...
+  createdAt DateTime @default(now())
+}
+
+// A concrete undertaking that foreign funding can attach to (Sprint C Phase 16).
+model Project {
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String
+  description       String?   @db.Text
+  locationCountry   String? // ISO2
+  locationRegion    String?
+  municipality      String?
+  locationPrecision String    @default("COUNTRY") // COUNTRY | REGION | MUNICIPALITY | ADDRESS | COORDINATE
+  startDate         DateTime? @db.Date
+  endDate           DateTime? @db.Date
+  organizerEntityId String?   @db.Uuid
+  totalFundingEur   Decimal?  @db.Decimal(18, 2)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  flows             FinancialFlow[]
+
+  @@index([locationCountry])
+  @@index([municipality])
+}
+
 enum FlowType {
   POLITICAL_DONATION
   CAMPAIGN_FUNDING
@@ -312,6 +379,15 @@ model FinancialFlow {
   ultimateBeneficiaryEntityId String? @db.Uuid
   amount                    Decimal  @db.Decimal(18, 2)
   currency                  String   @default("EUR")
+  // Sprint C — foreign funding.
+  originalAmount            Decimal? @db.Decimal(18, 2)
+  originalCurrency          String?
+  funderCountryCode         String? // ISO2 of the payer's country; null = unknown
+  recipientCountryCode      String? // ISO2 of the recipient's country
+  isForeign                 Boolean  @default(false) // funder country present and != FI
+  fundingType               FundingType?
+  projectId                 String?  @db.Uuid
+  project                   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   flowDate                  DateTime? @db.Date
   periodStart               DateTime? @db.Date
   periodEnd                 DateTime? @db.Date
@@ -337,6 +413,9 @@ model FinancialFlow {
   @@index([flowDate])
   @@index([currency])
   @@index([verificationStatus])
+  @@index([isForeign])
+  @@index([funderCountryCode])
+  @@index([projectId])
 }
 
 // ---------------------------------------------------------------- positions

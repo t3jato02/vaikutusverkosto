@@ -4,7 +4,7 @@
 // Direct prisma.relationship.create / financialFlow.create inside agents is forbidden
 // by design; adapters must route writes through this module.
 
-import type { PrismaClient, SourceType, RelationshipType, FlowType, Confidence, EntityStatus } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, Confidence, EntityStatus } from "@prisma/client";
 import type { RunContext, ProposedFact } from "./types";
 import { resolveEntity } from "./entityResolution";
 import { confidenceToScore, deriveAgentStatus } from "@/lib/verification";
@@ -19,6 +19,27 @@ export interface PublicationResult {
 }
 
 const MAX_AMOUNT = 1e14; // sanity bound: 100 trillion €
+
+const FUNDING_TYPE_BY_FLOW: Partial<Record<FlowType, FundingType>> = {
+  POLITICAL_DONATION: "DONATION",
+  CAMPAIGN_FUNDING: "DONATION",
+  PUBLIC_GRANT: "GRANT",
+  GOVERNMENT_SUBSIDY: "GRANT",
+  MUNICIPAL_GRANT: "GRANT",
+  EU_FUNDING: "GRANT",
+  RESEARCH_FUNDING: "GRANT",
+  FOUNDATION_GRANT: "GRANT",
+  ASSOCIATION_FUNDING: "GRANT",
+  PUBLIC_PROJECT_FUNDING: "GRANT",
+  PROCUREMENT: "PROCUREMENT",
+  CONSULTING_PAYMENT: "PROCUREMENT",
+  INVESTMENT: "INVESTMENT",
+  OWNERSHIP: "INVESTMENT",
+  SPONSORSHIP: "SPONSORSHIP",
+};
+function mapFundingType(t: FlowType): FundingType {
+  return FUNDING_TYPE_BY_FLOW[t] ?? "OTHER";
+}
 
 export async function ensureSource(
   db: PrismaClient,
@@ -370,6 +391,19 @@ async function upsertFlow(
     return "unchanged";
   }
   const verificationStatus = deriveAgentStatus({ sourceType: o.sourceType, confidence: o.confidence });
+  // Sprint C — classify the flow by funder country.
+  const [payer, recipient] = await Promise.all([
+    ctx.db.entity.findUnique({ where: { id: o.payerEntityId }, select: { countryCode: true, country: true, jurisdiction: true } }),
+    ctx.db.entity.findUnique({ where: { id: o.recipientEntityId }, select: { countryCode: true } }),
+  ]);
+  const cc = (e: { countryCode: string | null; country?: string | null; jurisdiction?: string | null } | null): string | null => {
+    if (!e) return null;
+    if (e.countryCode && /^[A-Z]{2}$/.test(e.countryCode)) return e.countryCode;
+    const s = (e.country ?? e.jurisdiction ?? "").toUpperCase();
+    if (s.startsWith("FI") || s === "SUOMI" || s === "FINLAND") return "FI";
+    return null;
+  };
+  const funderCountryCode = cc(payer);
   const flow = await ctx.db.financialFlow.create({
     data: {
       payerEntityId: o.payerEntityId,
@@ -377,6 +411,10 @@ async function upsertFlow(
       amount: o.amount,
       currency: o.currency,
       flowType: o.flowType,
+      fundingType: mapFundingType(o.flowType),
+      funderCountryCode,
+      recipientCountryCode: cc(recipient),
+      isForeign: Boolean(funderCountryCode) && funderCountryCode !== "FI",
       flowDate: o.flowDate,
       periodStart: o.periodStart,
       periodEnd: o.periodEnd,

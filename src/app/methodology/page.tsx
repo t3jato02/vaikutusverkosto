@@ -23,6 +23,62 @@ export default function MethodologyPage() {
         </ul>
       </Section>
 
+      <Section id="verification" title="Vahvistustilat">
+        <ul className="list-disc space-y-2 pl-5">
+          <li><strong>AUTO_DETECTED</strong> — agentti/jäsennin löysi yhteyden, mutta sitä ei ole vielä riittävästi vahvistettu. Ei näytetä tavallisena vahvistettuna yhteytenä.</li>
+          <li><strong>SOURCE_CONFIRMED</strong> — alkuperäinen tai riittävän vahva julkinen lähde tukee juuri kyseistä väitettä.</li>
+          <li><strong>HUMAN_VERIFIED</strong> — tarkastaja on tarkistanut lähteen ja hyväksynyt yhteyden. Agentti ei koskaan aseta tätä tilaa.</li>
+          <li><strong>DISPUTED</strong> — yhteydestä on uskottava ristiriita tai korjauspyyntö. Näytetään selvästi merkittynä.</li>
+          <li><strong>REJECTED</strong> — automaattinen havainto todettiin vääräksi. Ei julkisessa graafissa.</li>
+          <li><strong>STALE</strong> — tieto oli aiemmin pätevä, mutta nykytila on todennäköisesti muuttunut. Historiaa ei poisteta.</li>
+        </ul>
+        <p className="mt-2">
+          Ei-deterministiset tai toissijaiset lähteet (mediakooste, järjestön raportti, semanttinen
+          poiminta) tuottavat <strong>suhde-ehdokkaita</strong>, joita ei julkaista automaattisesti,
+          vaan ne käyvät läpi ihmisen tarkistuksen.
+        </p>
+      </Section>
+
+      <Section id="temporal" title="Nykyinen vai historiallinen">
+        <p>
+          Jokainen yhteys on ajallinen. Jos päättymispäivä on menneisyydessä tai tehtävä on
+          merkitty päättyneeksi, yhteyttä <strong>ei näytetä nykyisenä</strong>. Avoin, lähteen
+          aktiiviseksi vahvistama rooli on <strong>CURRENT</strong>; pelkän historiadokumentin
+          varassa oleva yhteys on <strong>HISTORICAL</strong> tai <strong>UNKNOWN_PERIOD</strong>,
+          ei automaattisesti nykyinen. Historiallista yhteyttä ei poisteta.
+        </p>
+      </Section>
+
+      <Section id="neutrality" title="Neutraali evidenssistandardi">
+        <p>
+          Sama evidenssistandardi koskee kaikkia valtioita ja organisaatioita — Yhdysvaltoja,
+          Kiinaa, Venäjää, Qataria, Saudi-Arabiaa, EU-maita, säätiöitä, kansalaisjärjestöjä,
+          uskonnollisia organisaatioita ja yrityksiä.
+        </p>
+        <p className="mt-2">
+          Henkilön <strong>kansallisuus, etninen tausta, uskonto tai syntymämaa ei itsessään</strong> ole
+          vaikuttamissuhde eikä riskisignaali. Merkitystä on vain dokumentoidulla rahoituksella,
+          omistuksella, tehtävällä, jäsenyydellä, sopimuksella, lahjoituksella tai päätöksellä —
+          ja jokaisella on lähde. Järjestelmä ei laske yleistä maa-, uskonto- tai
+          etnisyysperustaista &quot;epäilyttävyys-scorea&quot;.
+        </p>
+        <p className="mt-2">
+          Organisaation saama rahoitus ei ole siihen liittyvän henkilön henkilökohtaista
+          rahoitusta ilman eksplisiittistä, dokumentoitua yhteyttä.
+        </p>
+      </Section>
+
+      <Section id="source-quality" title="Lähteiden laatu">
+        <p>
+          Lähteet suositaan järjestyksessä: (1) alkuperäinen viranomaisrekisteri tai -rajapinta,
+          (2) alkuperäinen päätös tai dokumentti, (3) organisaation oma virallinen raportti,
+          (4) muu primäärilähde, (5) luotettava journalistinen lähde täydentävänä. Journalistinen
+          lähde ei ole samanarvoinen alkuperäisen viranomaisrekisterin kanssa. Sama yhteys voi
+          saada useita vahvistavia lähteitä; pelkkä lähteiden lukumäärä ei nosta vahvistustilaa
+          ilman semanttista yhteensopivuutta.
+        </p>
+      </Section>
+
       <Section id="relationships" title="Mikä lasketaan yhteydeksi">
         <p>
           Yhteys (relationship) on dokumentoitu suhde kahden toimijan välillä: esimerkiksi
