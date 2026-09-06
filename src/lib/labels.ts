@@ -151,6 +151,27 @@ const REL_PHRASE_FI: Partial<Record<RelationshipType, DirectionalPhrase>> = {
   CLIENT_OF: { out: "Asiakassuhde", in: "Asiakassuhde" },
   DECLARED_EU_INTEREST: { out: "Ilmoitettu EU-etuyhteys", in: "Ilmoitettu EU-etuyhteys" },
   ACCREDITED_REPRESENTATIVE_OF: { out: "Akkreditoitu edustaja", in: "Edustettu taho" },
+  // Journalism & media
+  WORKS_FOR: { out: "Työskentelee", in: "Työnantaja" },
+  WORKED_FOR: { out: "Työskennellyt", in: "Entinen työnantaja" },
+  PREVIOUSLY_WORKED_FOR: { out: "Työskennellyt aiemmin", in: "Entinen työnantaja" },
+  EDITOR_OF: { out: "Toimitussihteeri", in: "Toimituksen jäsen" },
+  EDITOR_IN_CHIEF_OF: { out: "Päätoimittaja", in: "Päätoimittaja" },
+  FOUNDED: { out: "Perustaja", in: "Perustettu" },
+  OWNED_BY: { out: "Omistuksessa", in: "Omistaja" },
+  PARTIALLY_OWNS: { out: "Osittain omistaa", in: "Osittain omistettu" },
+  PUBLISHES: { out: "Julkaisee", in: "Julkaisija" },
+  PART_OF_MEDIA_GROUP: { out: "Osa mediakonsernia", in: "Mediakonserni" },
+  SISTER_PUBLICATION_OF: { out: "Sisarjulkaisu", in: "Sisarjulkaisu" },
+  INTERVIEWED: { out: "Haastatteli", in: "Haastateltu" },
+  CITED: { out: "Siteerannut", in: "Siteerattu" },
+  CITED_AS_EXPERT: { out: "Siteerannut asiantuntijana", in: "Asiantuntijalähde" },
+  WROTE_ABOUT: { out: "Kirjoittanut", in: "Kohteena" },
+  PERSONAL_RELATIONSHIP: { out: "Henkilökohtainen suhde", in: "Henkilökohtainen suhde" },
+  POLITICAL_CANDIDATE_FOR: { out: "Poliittinen ehdokas", in: "Ehdokas" },
+  WORKED_FOR_PARTY: { out: "Työskennellyt puolueelle", in: "Puolue" },
+  POLITICAL_AIDE_TO: { out: "Poliittinen avustaja", in: "Avustettu" },
+  RECEIVED_FUNDING_FROM: { out: "Saanut rahoitusta", in: "Rahoittaja" },
 };
 
 /**

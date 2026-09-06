@@ -110,18 +110,29 @@ export default async function ExplorePage() {
       <div className="grid gap-6 min-w-0 lg:grid-cols-4">
         <PhaseCard id="yritykset" title="Yritysvalta" desc="Yritykset, hallitukset, omistus. YTJ- ja PRH-käsittely tulossa (vaihe B)." />
         <PhaseCard id="elake" title="Eläkevalta" desc="Eläkelaitosten johto, hallitukset ja sijoitukset. Vaihe A/B." />
-        <PhaseCard id="media" title="Media" desc="Mediaomistus ja johto. Vaihe B." />
+        <PhaseCard id="media" title="Media" desc="Toimittajat, mediat, omistusketjut ja journalistinen tuotanto." href="/media" cta="Katso mediaa →" />
         <PhaseCard id="kunnat" title="Kunnat" desc="Kuntapäättäjät, avustukset, hankinnat. Vaihe B." />
       </div>
     </div>
   );
 }
 
-function PhaseCard({ id, title, desc }: { id: string; title: string; desc: string }) {
-  return (
-    <section id={id} className="card">
+function PhaseCard({ id, title, desc, href, cta }: { id: string; title: string; desc: string; href?: string; cta?: string }) {
+  const inner = (
+    <>
       <h3 className="text-sm font-semibold text-ink-900">{title}</h3>
       <p className="mt-1 text-xs leading-relaxed text-ink-500">{desc}</p>
-    </section>
+      {cta && <p className="mt-2 text-xs font-medium text-accent">{cta}</p>}
+    </>
+  );
+  if (href) {
+    return (
+      <section id={id} className="card group">
+        <Link href={href} className="block group-hover:text-accent">{inner}</Link>
+      </section>
+    );
+  }
+  return (
+    <section id={id} className="card">{inner}</section>
   );
 }
