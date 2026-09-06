@@ -301,15 +301,113 @@ export async function getMoneyAggregates() {
   return { byType, byRecipient, recipients };
 }
 
+// Event types produced in high volume by a single ingestion run. Kept in sync
+// with BULK_EVENT_TYPES in groupRecentChanges.
+const BULK_CHANGE_TYPES = ["NEW_GRANT", "NEW_CONTRACT", "ENTITY_UPDATED"] as const;
+
 export async function getRecentChanges(limit = 30) {
-  return db.changeLog.findMany({
-    take: limit,
-    orderBy: { occurredAt: "desc" },
-    include: {
-      entity: { select: { id: true, canonicalName: true, type: true } },
-      relationship: { select: { relationshipType: true } },
+  const ent = { select: { id: true, canonicalName: true, type: true } } as const;
+  const include = {
+    entity: ent,
+    relationship: {
+      select: { relationshipType: true, sourceEntityId: true, sourceEntity: ent, targetEntity: ent },
     },
-  });
+    flow: {
+      select: { amount: true, currency: true, flowType: true, payerEntity: ent, recipientEntity: ent },
+    },
+  } as const;
+
+  // Two windows so a large grant/contract import (which rolls up to a single
+  // feed row) never buries every per-actor change behind it.
+  const [narrative, bulk] = await Promise.all([
+    db.changeLog.findMany({
+      where: { eventType: { notIn: [...BULK_CHANGE_TYPES] } },
+      take: Math.max(limit * 4, 120),
+      orderBy: { occurredAt: "desc" },
+      include,
+    }),
+    db.changeLog.findMany({
+      where: { eventType: { in: [...BULK_CHANGE_TYPES] } },
+      take: 250,
+      orderBy: { occurredAt: "desc" },
+      include,
+    }),
+  ]);
+  // Resolve a subject + counterpart per row. Grant/flow rows carry no entityId —
+  // use the flow's recipient as subject, payer as counterpart.
+  const resolve = <T extends (typeof narrative)[number]>(c: T) => {
+    let subject = c.entity;
+    let counterpart: typeof c.entity = null;
+    if (c.relationship) {
+      const subjIsSource = subject?.id === c.relationship.sourceEntityId;
+      counterpart = subjIsSource ? c.relationship.targetEntity : c.relationship.sourceEntity;
+      if (!subject) subject = c.relationship.sourceEntity;
+    } else if (c.flow) {
+      subject = subject ?? c.flow.recipientEntity ?? c.flow.payerEntity;
+      counterpart = c.flow.payerEntity ?? c.flow.recipientEntity;
+    }
+    return { ...c, subject, counterpart };
+  };
+
+  const narrativeRows = narrative.map(resolve).filter((c) => c.subject != null).slice(0, limit);
+  const bulkRows = bulk.map(resolve).filter((c) => c.subject != null);
+  return [...narrativeRows, ...bulkRows].sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+}
+
+export type RecentChange = Awaited<ReturnType<typeof getRecentChanges>>[number];
+
+export interface ChangeGroup {
+  key: string;
+  eventType: RecentChange["eventType"];
+  subject: RecentChange["subject"];
+  occurredAt: Date;
+  items: RecentChange[];
+  /** true => a bulk-ingest roll-up across many subjects, not one actor. */
+  bulk?: boolean;
+}
+
+// Event types produced in high volume by a single ingestion run — roll these
+// up per (type, day) so one EU-funding import is one row, not 200.
+const BULK_EVENT_TYPES = new Set<RecentChange["eventType"]>([...BULK_CHANGE_TYPES]);
+
+/**
+ * Collapse a change list into feed rows (Phase 9 dedup):
+ *  - bulk types (grants/contracts): one roll-up per event type + calendar day;
+ *  - everything else: consecutive entries with the same subject + type + day.
+ * Order is otherwise preserved (newest first).
+ */
+export function groupRecentChanges(changes: RecentChange[]): ChangeGroup[] {
+  const dayOf = (d: Date) => new Date(d).toISOString().slice(0, 10);
+  const groups: ChangeGroup[] = [];
+  const bulkIndex = new Map<string, ChangeGroup>();
+
+  for (const c of changes) {
+    if (BULK_EVENT_TYPES.has(c.eventType)) {
+      const k = `${c.eventType}|${dayOf(c.occurredAt)}`;
+      const existing = bulkIndex.get(k);
+      if (existing) {
+        existing.items.push(c);
+        continue;
+      }
+      const g: ChangeGroup = { key: k, eventType: c.eventType, subject: null, occurredAt: c.occurredAt, items: [c], bulk: true };
+      bulkIndex.set(k, g);
+      groups.push(g);
+      continue;
+    }
+    const last = groups[groups.length - 1];
+    if (
+      last &&
+      !last.bulk &&
+      last.eventType === c.eventType &&
+      last.subject?.id === c.subject?.id &&
+      dayOf(last.occurredAt) === dayOf(c.occurredAt)
+    ) {
+      last.items.push(c);
+      continue;
+    }
+    groups.push({ key: c.id, eventType: c.eventType, subject: c.subject, occurredAt: c.occurredAt, items: [c] });
+  }
+  return groups;
 }
 
 export async function getPartySizes() {
