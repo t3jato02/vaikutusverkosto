@@ -7,8 +7,8 @@ import type { RelRow } from "@/components/RelationshipList";
 
 type RelWithGraph = Prisma.RelationshipGetPayload<{
   include: {
-    sourceEntity: { select: { id: true; canonicalName: true; type: true } };
-    targetEntity: { select: { id: true; canonicalName: true; type: true } };
+    sourceEntity: { select: { id: true; canonicalName: true; type: true; subtype: true } };
+    targetEntity: { select: { id: true; canonicalName: true; type: true; subtype: true } };
     evidence: { include: { source: true } };
   };
 }>;
@@ -26,7 +26,7 @@ export function toRelRows(rels: RelWithGraph[], selfId: string): RelRow[] {
       other: {
         id: other.id,
         name: other.canonicalName,
-        href: entityUrlFor(other.id, other.type, other.canonicalName),
+        href: entityUrlFor(other.id, other.type, other.canonicalName, other.subtype),
         typeLabel: entityLabel(other.type),
       },
       direction: out ? "out" : "in",
