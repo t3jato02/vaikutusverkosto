@@ -165,6 +165,7 @@ export async function publishVerifiedFact(
       startDate: fact.startDate ?? null,
       endDate: fact.endDate ?? null,
       assertedCurrent: fact.assertedCurrent,
+      ownershipPercent: fact.ownershipPercent ?? null,
       confidence: fact.confidence,
       sourceType: fact.sourceType,
       sourceId: evidenceSource.id,
@@ -246,6 +247,7 @@ async function upsertRelationship(
     startDate: Date | null;
     endDate: Date | null;
     assertedCurrent?: boolean;
+    ownershipPercent?: number | null;
     confidence: Confidence;
     sourceType: SourceType;
     sourceId: string;
@@ -354,6 +356,7 @@ async function upsertRelationship(
       targetEntityId: o.targetEntityId,
       relationshipType: o.relationshipType,
       role: o.role,
+      percentage: o.ownershipPercent ?? null,
       startDate: o.startDate,
       endDate: o.endDate,
       observedAt: new Date(),

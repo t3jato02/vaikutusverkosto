@@ -7,6 +7,7 @@ import { prhAdapter } from "./prh";
 import { sidonnaisuudetAdapter } from "./sidonnaisuudet";
 import { euFtsAdapter } from "./euFts";
 import { euTransparencyAdapter } from "./euTransparency";
+import { vnkOwnershipAdapter } from "./vnkOwnership";
 
 const REGISTRY: Record<string, SourceAdapter> = {};
 
@@ -29,6 +30,7 @@ register(prhAdapter);
 register(sidonnaisuudetAdapter);
 register(euFtsAdapter);
 register(euTransparencyAdapter);
+register(vnkOwnershipAdapter);
 
 export const SCHEDULES: Record<string, string> = {
   daily: "0 4 * * *", // 04:00 UTC

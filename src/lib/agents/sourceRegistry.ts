@@ -29,26 +29,15 @@ function registryRowFromAdapter(a: SourceAdapter) {
   };
 }
 
-// International sources whose adapters are not built yet (Sprint C Phase 12).
-// Registered DISABLED so they appear in the registry with a documented plan;
-// the scheduler never runs a disabled source.
-const PLANNED_SOURCES = [
-  {
-    id: "vnk-state-ownership",
-    name: "Valtion omistajaohjaus — valtion suorat omistukset",
-    publisher: "Valtioneuvoston kanslia (omistajaohjausosasto)",
-    baseUrl: "https://vnk.fi/omistajaohjaus/valtio-omistajana",
-    sourceType: "OFFICIAL_PRIMARY" as const,
-    reliabilityTier: "OFFICIAL_PRIMARY" as const,
-    format: "HTML" as const,
-    updateCadence: "monthly" as const,
-    termsUrl: "https://vnk.fi/tietoa-sivustosta",
-    notes:
-      "Suomen valtion suorat yhtiöomistukset (osuus-% ja tehtäväluokka). Suunniteltu adapteri " +
-      "luo ajallisia OWNS-yhteyksiä: Suomen valtio → yhtiö, evidenssinä virallinen listaus. " +
-      "Tosiasiallisia edunsaajia ei ingestoida (rajoitettu pääsy, ei avointa lähdettä). Ei vielä käytössä.",
-  },
-] as const;
+// Sources known but whose adapters are not built yet. Registered DISABLED so
+// they show in the registry with a plan; the scheduler never runs a disabled
+// source. (Currently empty — eu-fts, eu-transparency-register and
+// vnk-state-ownership are now real adapters.)
+const PLANNED_SOURCES: {
+  id: string; name: string; publisher: string; baseUrl: string;
+  sourceType: "OFFICIAL_PRIMARY" | "OFFICIAL_REGISTER"; reliabilityTier: "OFFICIAL_PRIMARY" | "OFFICIAL_REGISTER";
+  format: "API" | "HTML" | "PDF" | "RSS"; updateCadence: "daily" | "weekly" | "monthly"; termsUrl: string; notes: string;
+}[] = [];
 
 /**
  * Upsert one registry row per registered adapter. Idempotent: descriptive
@@ -81,7 +70,7 @@ export async function syncRegistry(client: PrismaClient = db): Promise<number> {
         termsUrl: row.termsUrl,
         notes: row.notes,
       },
-      create: { id: a.id, ...row },
+      create: { id: a.id, ...row, enabled: true },
     });
   }
   return adapters.length;
@@ -95,7 +84,7 @@ export async function ensureRegistrySource(adapterId: string, client: PrismaClie
   return client.ingestionSource.upsert({
     where: { id: a.id },
     update: {},
-    create: { id: a.id, ...row },
+    create: { id: a.id, ...row, enabled: true },
   });
 }
 

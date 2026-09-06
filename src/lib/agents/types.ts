@@ -59,6 +59,8 @@ export interface NormalizedFact {
   funderCountryCode?: string | null;
   recipientCountryCode?: string | null;
   projectRef?: ProjectRef;
+  /** Ownership / shareholding percentage (0-100), for OWNS-family relationships. */
+  ownershipPercent?: number;
 }
 
 /** A fact proposed by an agent, ready for verification + publication. */
@@ -97,6 +99,8 @@ export interface ProposedFact {
   funderCountryCode?: string | null;
   recipientCountryCode?: string | null;
   projectRef?: ProjectRef;
+  /** Ownership / shareholding percentage (0-100), for OWNS-family relationships. */
+  ownershipPercent?: number;
 }
 
 /** Reference to an entity that must be resolved (never merged on name alone). */
