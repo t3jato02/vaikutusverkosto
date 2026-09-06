@@ -13,6 +13,7 @@
 
 import { EntityType, RelationshipType, SourceType } from "@prisma/client";
 import type { NormalizedFact, SourceAdapter, SourceDocument } from "./types";
+import { assertSchema } from "@/lib/ingestion/schemaFingerprint";
 
 const XML_URL = "https://transparency-register.europa.eu/odplastorganisationxml_en";
 const PARSER_VERSION = "eu-tr-1";
@@ -92,10 +93,17 @@ function categoryOf(cat: string | null):
   return "OTHER";
 }
 
-async function fetchFinnishOrgs(): Promise<TrOrg[]> {
+// XML elements the parser depends on. If the official export renames/drops one
+// the whole run fails safely rather than emitting empty registrations.
+const TR_REQUIRED_ELEMENTS = ["interestRepresentative", "name", "headOffice", "country", "registrationCategory"];
+
+async function fetchFinnishOrgs(log?: (m: string) => void): Promise<TrOrg[]> {
   const res = await fetch(XML_URL, { redirect: "follow" });
   if (!res.ok) throw new Error(`EU TR: HTTP ${res.status}`);
   const xml = await res.text();
+  const observedTags = [...new Set([...xml.matchAll(/<([a-zA-Z][\w-]*)[\s>]/g)].map((m) => m[1]))];
+  const schema = assertSchema("EU Transparency Register", { observed: observedTags, required: TR_REQUIRED_ELEMENTS });
+  log?.(`EU TR: schema ok — ${schema.observedCount} elements (fingerprint ${schema.fingerprint})`);
   const blocks = xml.split("<interestRepresentative>").slice(1).map((b) => b.split("</interestRepresentative>")[0]);
   const out: TrOrg[] = [];
   for (const b of blocks) {
@@ -123,7 +131,7 @@ export const euTransparencyAdapter: SourceAdapter = {
     "SUHDE-EHDOKKAITA. Ei koskaan INFLUENCES.",
 
   async discover(ctx): Promise<SourceDocument[]> {
-    const orgs = await fetchFinnishOrgs();
+    const orgs = await fetchFinnishOrgs(ctx.log);
     ctx.log(`EU TR: ${orgs.length} Finnish-HQ organisations`);
     return orgs.map((o) => ({
       id: `eu-tr:${o.code}`,
