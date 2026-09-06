@@ -16,7 +16,9 @@ const config: Config = {
           900: "#14181d",
           700: "#2b3138",
           500: "#565e68", // secondary text — passes WCAG AA on surface/paper
-          300: "#8b929c",
+          // tertiary text — darkened so `text-ink-300` also clears WCAG AA
+          // (~4.9:1 on white / ~4.7:1 on paper) even at 10–13px.
+          300: "#676d76",
           100: "#e5e7ea",
         },
         // Semantic aliases (preferred in new code).

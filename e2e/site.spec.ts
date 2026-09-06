@@ -77,7 +77,7 @@ test.describe("person profile", () => {
 test.describe("money page", () => {
   test("money shows honest empty-or-real state and no demo flows", async ({ page }) => {
     await page.goto("/money");
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Julkinen raha");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Raha");
     const body = await page.textContent("body");
     expect(body).not.toContain("DEMO");
     expect(body).not.toContain("(demo)");

@@ -336,11 +336,18 @@ async function upsertRelationship(
           entityId: o.sourceEntityId,
           relationshipId: existing.id,
           sourceId: o.sourceId,
+          // Technical audit tag only — the feed renders human text from
+          // structured fields (see src/lib/labels.ts). Never UI prose.
           description: endChanged
-            ? `Yhteyden päättymispäivä päivitetty: ${o.relationshipType}`
+            ? `rel:enddate:${o.relationshipType}`
             : pctChanged
-              ? `Omistusosuus päivitetty: ${o.relationshipType} (${newPct} %)`
-              : `Yhteyden varmuustaso päivitetty: ${o.relationshipType}`,
+              ? `rel:ownership:${o.relationshipType}`
+              : `rel:confidence:${o.relationshipType}`,
+          afterData: {
+            relationshipType: o.relationshipType,
+            change: endChanged ? "enddate" : pctChanged ? "ownership" : "confidence",
+            ...(pctChanged ? { percentage: newPct } : {}),
+          },
           occurredAt: new Date(),
         },
       });
@@ -384,7 +391,9 @@ async function upsertRelationship(
       entityId: o.sourceEntityId,
       relationshipId: rel.id,
       sourceId: o.sourceId,
-      description: `Uusi yhteys: ${o.relationshipType}`,
+      // Technical audit tag only — feed text is derived in src/lib/labels.ts.
+      description: `rel:created:${o.relationshipType}`,
+      afterData: { relationshipType: o.relationshipType, change: "created" },
       occurredAt: new Date(),
     },
   });
@@ -449,7 +458,8 @@ async function upsertFlow(
           eventType: "AMOUNT_CHANGED",
           flowId: existing.id,
           sourceId: o.sourceId,
-          description: `Rahavirran summa päivittyi (${o.flowType})`,
+          description: `flow:amount:${o.flowType}`,
+          afterData: { flowType: o.flowType, amount: Number(o.amount), currency: o.currency },
           occurredAt: new Date(),
         },
       });
@@ -506,7 +516,8 @@ async function upsertFlow(
       eventType: "NEW_GRANT",
       flowId: flow.id,
       sourceId: o.sourceId,
-      description: `Uusi rahavirta: ${o.flowType} ${o.amount} ${o.currency}`,
+      description: `flow:created:${o.flowType}`,
+      afterData: { flowType: o.flowType, amount: Number(o.amount), currency: o.currency },
       occurredAt: new Date(),
     },
   });

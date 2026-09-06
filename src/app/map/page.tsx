@@ -57,8 +57,8 @@ export default async function MapPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-xl font-bold">Kartta</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-500">
+        <h1 className="text-page-title">Kartta</h1>
+        <p className="mt-1 max-w-3xl text-sm text-muted">
           Toimijoiden julkinen sijainti: kotikunta, vaalipiiri, virka tai institutionaalinen
           sijainti. Yksityisiä asuinpaikkoja ei koskaan päätellä tai näytetä.
         </p>
@@ -86,12 +86,12 @@ export default async function MapPage() {
       </section>
 
       <section aria-label="Kunnat">
-        <h2 className="card-title mb-2">TOIMIJAT KUNNITTAIN</h2>
-        <ul className="card divide-y divide-ink-100">
+        <h2 className="section-title mb-2">Toimijat kunnittain</h2>
+        <ul className="card divide-y divide-line">
           {rows.slice(0, 40).map((r) => (
             <li key={r.municipality} className="flex items-center justify-between gap-3 py-2">
-              <span className="text-sm font-medium text-ink-900">{r.municipality}</span>
-              <span className="text-sm tabular-nums text-ink-500">{formatNumber(r.count)}</span>
+              <span className="text-sm font-medium text-ink">{r.municipality}</span>
+              <span className="text-sm tabular-nums text-muted">{formatNumber(r.count)}</span>
             </li>
           ))}
         </ul>

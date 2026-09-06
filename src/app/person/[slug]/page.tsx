@@ -21,7 +21,7 @@ import {
 import Avatar from "@/components/Avatar";
 import { ConfidenceBadge } from "@/components/badges";
 import { sourceTypeLabel } from "@/components/SourceLink";
-import GraphView from "@/components/GraphView";
+import GraphView from "@/components/LazyGraphView";
 import EntityNetworkPosition from "@/components/EntityNetworkPosition";
 
 export const dynamic = "force-dynamic";

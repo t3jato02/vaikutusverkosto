@@ -93,10 +93,16 @@ export default function ForeignFlowGraph({ query }: { query: string }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs">
-        <label>Näytettävät virrat:</label>
-        <select value={limit} onChange={(e) => setLimit(Number(e.target.value))} className="input h-7 py-0 text-xs">
-          {[20, 30, 50, 80].map((n) => <option key={n} value={n}>{n}</option>)}
-        </select>
+        <label className="flex items-center gap-2">
+          Näytettävät virrat:
+          <select
+            value={limit}
+            onChange={(e) => setLimit(Number(e.target.value))}
+            className="input h-8 py-0 text-xs"
+          >
+            {[20, 30, 50, 80].map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
         {loading && <span className="text-ink-300">ladataan…</span>}
       </div>
       <div className="relative max-w-full overflow-hidden rounded-lg border border-line bg-surface">

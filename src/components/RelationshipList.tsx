@@ -150,41 +150,38 @@ function EvidenceBody({ row }: { row: RelRow }) {
   const v = verificationLabel(row.verificationStatus);
   const e = row.evidence!;
   return (
-    <dl>
-      <Field label="Yhteys">
-        {relationshipPhrase(row.relationshipType, row.direction)} — {row.other.name}
-      </Field>
-      <Field label="Ajanjakso">{periodText(row)}</Field>
-      <Field label="Tila">
-        <span className="inline-flex items-center gap-1.5">
-          <VerificationBadge status={row.verificationStatus} />
-        </span>
-        <p className="mt-1 text-[13px] text-muted">{v.description}</p>
-      </Field>
-      <Field label="Lähde">{e.sourceName}</Field>
-      <Field label="Lähdetyyppi">{e.sourceTypeLabel}</Field>
-      <Field label="Julkaisija">{e.publisher}</Field>
-      <Field label="Dokumentti">{e.documentTitle}</Field>
-      <Field label="Julkaistu">{e.publishedAt}</Field>
-      <Field label="Haettu">{e.retrievedAt}</Field>
-      {e.quote && (
-        <Field label="Todiste">
-          <blockquote className="border-l-2 border-accent/40 pl-3 text-[13px] italic text-muted">
-            {e.quote}
-          </blockquote>
+    <>
+      <dl>
+        <Field label="Yhteys">
+          {relationshipPhrase(row.relationshipType, row.direction)} — {row.other.name}
         </Field>
-      )}
-      <a
-        href={e.sourceUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="btn-primary mt-4 w-full"
-      >
+        <Field label="Ajanjakso">{periodText(row)}</Field>
+        <Field label="Tila">
+          <span className="inline-flex items-center gap-1.5">
+            <VerificationBadge status={row.verificationStatus} />
+          </span>
+          <p className="mt-1 text-[13px] text-muted">{v.description}</p>
+        </Field>
+        <Field label="Lähde">{e.sourceName}</Field>
+        <Field label="Lähdetyyppi">{e.sourceTypeLabel}</Field>
+        <Field label="Julkaisija">{e.publisher}</Field>
+        <Field label="Dokumentti">{e.documentTitle}</Field>
+        <Field label="Julkaistu">{e.publishedAt}</Field>
+        <Field label="Haettu">{e.retrievedAt}</Field>
+        {e.quote && (
+          <Field label="Todiste">
+            <blockquote className="border-l-2 border-accent/40 pl-3 text-[13px] italic text-muted">
+              {e.quote}
+            </blockquote>
+          </Field>
+        )}
+      </dl>
+      <a href={e.sourceUrl} target="_blank" rel="noreferrer" className="btn-primary mt-4 w-full">
         Avaa alkuperäinen lähde
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
           <path d="M7 17L17 7M17 7H8M17 7v9" />
         </svg>
       </a>
-    </dl>
+    </>
   );
 }

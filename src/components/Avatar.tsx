@@ -1,5 +1,17 @@
-import { NODE_COLORS } from "@/lib/constants";
 import type { EntityType } from "@prisma/client";
+
+// Darker-than-graph tints so white initials clear WCAG AA (>= 4.5:1).
+const AVATAR_BG: Partial<Record<EntityType, string>> = {
+  PERSON: "#2f6099",
+  ORGANIZATION: "#54606b",
+  COMPANY: "#1c5f5a",
+  GOVERNMENT_BODY: "#4b4f66",
+  POLITICAL_PARTY: "#985327",
+  EDUCATIONAL_INSTITUTION: "#356343",
+  MEDIA_ORGANIZATION: "#286a8c",
+  DECISION: "#33393f",
+};
+const AVATAR_FALLBACK = "#54606b";
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).slice(0, 2);
@@ -30,7 +42,7 @@ export default function Avatar({
       />
     );
   }
-  const color = NODE_COLORS[type] ?? "#777";
+  const color = AVATAR_BG[type] ?? AVATAR_FALLBACK;
   return (
     <span
       aria-hidden="true"

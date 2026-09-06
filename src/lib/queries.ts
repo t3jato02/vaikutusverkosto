@@ -386,41 +386,43 @@ export interface ChangeGroup {
 const BULK_EVENT_TYPES = new Set<RecentChange["eventType"]>([...BULK_CHANGE_TYPES]);
 
 /**
- * Collapse a change list into feed rows (Phase 9 dedup):
- *  - bulk types (grants/contracts): one roll-up per event type + calendar day;
- *  - everything else: consecutive entries with the same subject + type + day.
- * Order is otherwise preserved (newest first).
+ * Collapse a change list into feed rows (Phase 9 + 15 dedup):
+ *  - bulk types (grants/contracts/entity-updates): one roll-up per event type +
+ *    calendar day, across all subjects;
+ *  - everything else: all entries with the same subject + event type + day are
+ *    merged into one group even when other actors' events sit between them
+ *    (non-consecutive grouping). Different event types are never merged.
+ * Group order follows first occurrence (newest first).
  */
 export function groupRecentChanges(changes: RecentChange[]): ChangeGroup[] {
   const dayOf = (d: Date) => new Date(d).toISOString().slice(0, 10);
   const groups: ChangeGroup[] = [];
-  const bulkIndex = new Map<string, ChangeGroup>();
+  const index = new Map<string, ChangeGroup>();
 
   for (const c of changes) {
+    const day = dayOf(c.occurredAt);
     if (BULK_EVENT_TYPES.has(c.eventType)) {
-      const k = `${c.eventType}|${dayOf(c.occurredAt)}`;
-      const existing = bulkIndex.get(k);
+      const k = `bulk|${c.eventType}|${day}`;
+      const existing = index.get(k);
       if (existing) {
         existing.items.push(c);
         continue;
       }
       const g: ChangeGroup = { key: k, eventType: c.eventType, subject: null, occurredAt: c.occurredAt, items: [c], bulk: true };
-      bulkIndex.set(k, g);
+      index.set(k, g);
       groups.push(g);
       continue;
     }
-    const last = groups[groups.length - 1];
-    if (
-      last &&
-      !last.bulk &&
-      last.eventType === c.eventType &&
-      last.subject?.id === c.subject?.id &&
-      dayOf(last.occurredAt) === dayOf(c.occurredAt)
-    ) {
-      last.items.push(c);
+    // Non-consecutive: one group per (subject, eventType, day).
+    const k = `${c.subject?.id ?? "?"}|${c.eventType}|${day}`;
+    const existing = index.get(k);
+    if (existing) {
+      existing.items.push(c);
       continue;
     }
-    groups.push({ key: c.id, eventType: c.eventType, subject: c.subject, occurredAt: c.occurredAt, items: [c] });
+    const g: ChangeGroup = { key: c.id, eventType: c.eventType, subject: c.subject, occurredAt: c.occurredAt, items: [c] };
+    index.set(k, g);
+    groups.push(g);
   }
   return groups;
 }
