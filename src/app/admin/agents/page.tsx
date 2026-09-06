@@ -2,8 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { listAdapters } from "@/lib/agents/registry";
-import { syncRegistry, listRegistry, sourceHealth } from "@/lib/agents/sourceRegistry";
+import { syncRegistry, listRegistry, sourceHealth, sourceAlert, nextDueAt } from "@/lib/agents/sourceRegistry";
 import { formatDate } from "@/lib/format";
+
+const ALERT_STYLE: Record<string, string> = {
+  WARNING: "bg-amber-50 text-amber-800",
+  DEGRADED: "bg-amber-100 text-amber-900",
+  FAILING: "bg-red-50 text-red-700",
+};
 
 export const metadata: Metadata = { title: "Agentit" };
 export const dynamic = "force-dynamic";
@@ -51,12 +57,42 @@ export default async function AdminAgentsPage() {
   const lastRuns = new Map<string, (typeof runs)[number]>();
   for (const r of runs) if (!lastRuns.has(r.agent)) lastRuns.set(r.agent, r);
 
+  const alerts = registry
+    .map((s) => ({ s, alert: sourceAlert(s) }))
+    .filter(({ alert }) => alert.level !== "OK");
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Agenttien ajot</h1>
         <Link href="/admin" className="btn text-xs">Takaisin</Link>
       </div>
+
+      <section aria-label="Ajovaroitukset">
+        <h2 className="card-title mb-2">AJOVAROITUKSET ({alerts.length})</h2>
+        {alerts.length === 0 ? (
+          <p className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-500">
+            Ei varoituksia — kaikki käytössä olevat lähteet tuottavat dataa odotetusti.
+          </p>
+        ) : (
+          <ul className="card divide-y divide-ink-100">
+            {alerts.map(({ s, alert }) => (
+              <li key={s.id} className="flex flex-wrap items-start justify-between gap-2 py-2.5 text-sm">
+                <div className="min-w-0">
+                  <span className="font-semibold text-ink-900">{s.name}</span>
+                  <span className="ml-2 rounded bg-ink-100 px-1.5 py-0.5 text-[10px] uppercase text-ink-500">{s.id}</span>
+                  <ul className="mt-0.5 list-disc pl-4 text-[11px] text-ink-600">
+                    {alert.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                  </ul>
+                </div>
+                <span className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold ${ALERT_STYLE[alert.level]}`}>
+                  {alert.level}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section aria-label="Havainnointi">
         <h2 className="card-title mb-2">HAVAINNOINTI</h2>
@@ -158,6 +194,7 @@ export default async function AdminAgentsPage() {
                   {s.consecutiveFailures > 0 ? ` · ${s.consecutiveFailures} peräkkäistä virhettä` : ""}
                   {" · "}viime ajo: {s.lastRunDocsChecked} tark. / {s.lastRunDocsChanged} muutt.
                   {s.lastRunDurationMs != null ? ` / ${Math.round(s.lastRunDurationMs / 1000)} s` : ""}
+                  {s.enabled ? ` · seuraava ajo n. ${formatDate(nextDueAt(s))}` : ""}
                 </p>
                 {s.lastError ? <p className="mt-0.5 truncate text-[11px] text-red-600">{s.lastError}</p> : null}
               </div>
