@@ -1,8 +1,7 @@
 import Link from "next/link";
 import SearchBox from "@/components/SearchBox";
+import ChangesList from "@/components/ChangesList";
 import { getRecentChanges, getStats } from "@/lib/queries";
-import { CHANGE_EVENT_LABELS } from "@/lib/constants";
-import { relativeTime, formatDate } from "@/lib/format";
 
 const EXPLORE_SECTIONS = [
   { href: "/explore#politiikka", label: "Poliittinen valta", desc: "Eduskunta, hallitus, puolueet" },
@@ -18,7 +17,7 @@ const EXPLORE_SECTIONS = [
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [changes, stats] = await Promise.all([getRecentChanges(8), getStats()]);
+  const [changes, stats] = await Promise.all([getRecentChanges(40), getStats()]);
   return (
     <div className="space-y-10">
       <section className="pt-4 text-center sm:pt-10">
@@ -65,24 +64,9 @@ export default async function HomePage() {
             Kaikki →
           </Link>
         </div>
-        <ul className="card divide-y divide-ink-100">
-          {changes.length === 0 && <li className="py-3 text-sm text-ink-500">Ei muutoksia vielä.</li>}
-          {changes.map((c) => (
-            <li key={c.id} className="flex items-start justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <span className="text-xs font-semibold text-ink-900">
-                  {c.entity?.canonicalName ?? "Järjestelmä"}
-                </span>
-                <p className="truncate text-xs text-ink-500">
-                  {CHANGE_EVENT_LABELS[c.eventType]?.fi}: {c.description}
-                </p>
-              </div>
-              <span className="shrink-0 text-[11px] text-ink-300" title={formatDate(c.occurredAt)}>
-                {relativeTime(c.occurredAt)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="card-pad">
+          <ChangesList changes={changes} compact maxGroups={6} />
+        </div>
       </section>
     </div>
   );

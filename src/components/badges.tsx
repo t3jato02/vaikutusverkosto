@@ -1,101 +1,83 @@
-import { CONFIDENCE_LABELS } from "@/lib/constants";
-import type { Confidence, VerificationStatus } from "@prisma/client";
+import type { Confidence, VerificationStatus, TemporalState } from "@prisma/client";
+import { verificationLabel, temporalLabel, confidenceLabel, type VerificationTone } from "@/lib/labels";
 
-const CONFIDENCE_STYLES: Record<Confidence, string> = {
-  VERIFIED: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  HIGH: "bg-sky-50 text-sky-800 border-sky-200",
-  MEDIUM: "bg-amber-50 text-amber-800 border-amber-200",
-  LOW: "bg-orange-50 text-orange-800 border-orange-200",
-  DISPUTED: "bg-red-50 text-red-800 border-red-200",
+const TONE_CLASS: Record<VerificationTone, string> = {
+  confirmed: "bg-verified-soft text-verified border-verified/25",
+  review: "bg-ink-100 text-ink-700 border-line",
+  disputed: "bg-disputed-soft text-disputed border-disputed/25",
+  stale: "bg-stale-soft text-stale border-stale/25",
+  rejected: "bg-ink-100 text-ink-500 border-line",
+};
+
+const TONE_DOT: Record<VerificationTone, string> = {
+  confirmed: "bg-verified",
+  review: "bg-ink-300",
+  disputed: "bg-disputed",
+  stale: "bg-stale",
+  rejected: "bg-ink-300",
+};
+
+/**
+ * Human-readable verification status. No raw enum, no "TOSI".
+ * `variant="dot"` renders a compact dot + label for dense lists.
+ */
+export function VerificationBadge({
+  status,
+  variant = "chip",
+  lang = "fi",
+}: {
+  status: VerificationStatus;
+  variant?: "chip" | "dot";
+  lang?: "fi" | "en";
+}) {
+  const v = verificationLabel(status, lang);
+  if (variant === "dot") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[12px] text-muted" title={v.description}>
+        <span className={`status-dot ${TONE_DOT[v.tone]}`} aria-hidden />
+        {v.label}
+      </span>
+    );
+  }
+  return (
+    <span
+      title={v.description}
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium ${TONE_CLASS[v.tone]}`}
+    >
+      <span className={`status-dot ${TONE_DOT[v.tone]}`} aria-hidden />
+      {v.label}
+    </span>
+  );
+}
+
+const CONFIDENCE_CLASS: Record<Confidence, string> = {
+  VERIFIED: "bg-verified-soft text-verified border-verified/25",
+  HIGH: "bg-accent-soft text-accent-dark border-accent/25",
+  MEDIUM: "bg-stale-soft text-stale border-stale/25",
+  LOW: "bg-ink-100 text-ink-500 border-line",
+  DISPUTED: "bg-disputed-soft text-disputed border-disputed/25",
 };
 
 export function ConfidenceBadge({ value, lang = "fi" }: { value: Confidence; lang?: "fi" | "en" }) {
   return (
     <span
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-medium ${CONFIDENCE_STYLES[value]}`}
+      className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-medium ${CONFIDENCE_CLASS[value]}`}
     >
-      {CONFIDENCE_LABELS[value]?.[lang]}
+      {confidenceLabel(value, lang)}
     </span>
   );
 }
 
-// Fact-type separation (section 44): FACT / DERIVED / INFERENCE / ALLEGATION / DISPUTED.
-export type FactKind = "FACT" | "DERIVED" | "INFERENCE" | "ALLEGATION" | "DISPUTED";
-
-const FACT_STYLES: Record<FactKind, { label: string; cls: string; title: string }> = {
-  FACT: {
-    label: "TOSI",
-    cls: "bg-ink-900 text-white border-ink-900",
-    title: "Dokumentoitu tosiasia, joka perustuu lähteeseen",
-  },
-  DERIVED: {
-    label: "JOHDETTU",
-    cls: "bg-accent/10 text-accent border-accent/40",
-    title: "Laskennallinen mittari (ei suora väite tosiasiasta)",
-  },
-  INFERENCE: {
-    label: "PÄÄTELMÄ",
-    cls: "bg-purple-50 text-purple-800 border-purple-200",
-    title: "Analyyttinen päättely, ei varmennettu tosiasia",
-  },
-  ALLEGATION: {
-    label: "VÄITE",
-    cls: "bg-red-50 text-red-800 border-red-200",
-    title: "Väite tai syytös, jonka lähde esittää — ei vahvistettu",
-  },
-  DISPUTED: {
-    label: "RIITAUTETTU",
-    cls: "bg-orange-50 text-orange-800 border-orange-200",
-    title: "Lähteet ovat ristiriidassa keskenään",
-  },
-};
-
-export function FactBadge({ kind }: { kind: FactKind }) {
-  const s = FACT_STYLES[kind];
+/** Current vs historical vs unknown period — meaning, not decoration. */
+export function TemporalBadge({ state, lang = "fi" }: { state: TemporalState; lang?: "fi" | "en" }) {
+  if (state === "CURRENT") return null; // "current" is the norm; only flag the exceptions
+  const cls =
+    state === "HISTORICAL"
+      ? "bg-ink-100 text-ink-500 border-line"
+      : "bg-stale-soft text-stale border-stale/25";
   return (
-    <span
-      title={s.title}
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${s.cls}`}
-    >
-      {s.label}
-    </span>
-  );
-}
-
-// A7 verification status. SOURCE_CONFIRMED / HUMAN_VERIFIED render as a plain
-// FACT badge upstream; this badge exists to make DISPUTED and STALE unmissable.
-const STATUS_STYLES: Partial<Record<VerificationStatus, { label: string; cls: string; title: string }>> = {
-  HUMAN_VERIFIED: {
-    label: "IHMISEN VARMISTAMA",
-    cls: "bg-emerald-50 text-emerald-800 border-emerald-200",
-    title: "Tarkastaja on tarkistanut lähteen ja hyväksynyt yhteyden",
-  },
-  DISPUTED: {
-    label: "RIITAUTETTU",
-    cls: "bg-orange-50 text-orange-800 border-orange-200",
-    title: "Yhteydestä on uskottava ristiriita tai korjauspyyntö",
-  },
-  STALE: {
-    label: "VANHENTUNUT",
-    cls: "bg-amber-50 text-amber-800 border-amber-200",
-    title: "Tieto oli aiemmin pätevä; nykytila on todennäköisesti muuttunut",
-  },
-  AUTO_DETECTED: {
-    label: "EI VARMISTETTU",
-    cls: "bg-ink-100 text-ink-500 border-ink-300",
-    title: "Agentti havaitsi yhteyden; lähdettä ei ole vielä riittävästi varmistettu",
-  },
-};
-
-export function VerificationStatusBadge({ status }: { status: VerificationStatus }) {
-  const s = STATUS_STYLES[status];
-  if (!s) return null;
-  return (
-    <span
-      title={s.title}
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold tracking-wide ${s.cls}`}
-    >
-      {s.label}
+    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>
+      {temporalLabel(state, lang)}
     </span>
   );
 }
@@ -104,9 +86,9 @@ export function DemoBadge() {
   return (
     <span
       title="Tämä tieto on demodataa, ei tuotantotietoa"
-      className="inline-flex items-center rounded border border-dashed border-ink-300 bg-ink-100 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-ink-500"
+      className="inline-flex items-center rounded border border-dashed border-ink-300 bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-ink-500"
     >
-      DEMO
+      DEMODATA
     </span>
   );
 }

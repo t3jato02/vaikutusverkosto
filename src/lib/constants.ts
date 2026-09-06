@@ -1,6 +1,39 @@
-import { EntityType, RelationshipType, FlowType, Confidence, ChangeEventType } from "@prisma/client";
+import { EntityType, RelationshipType, FlowType, Confidence, ChangeEventType, FundingType } from "@prisma/client";
 
 type Label = { fi: string; en: string; sv?: string };
+
+export const FUNDING_TYPE_LABELS: Record<FundingType, Label> = {
+  GRANT: { fi: "Avustus", en: "Grant" },
+  DONATION: { fi: "Lahjoitus", en: "Donation" },
+  INVESTMENT: { fi: "Sijoitus", en: "Investment" },
+  PROCUREMENT: { fi: "Hankinta", en: "Procurement" },
+  LOAN: { fi: "Laina", en: "Loan" },
+  SPONSORSHIP: { fi: "Sponsorointi", en: "Sponsorship" },
+  MEMBERSHIP_FEE: { fi: "Jäsenmaksu", en: "Membership fee" },
+  OTHER: { fi: "Muu rahoitus", en: "Other funding" },
+};
+
+export function fundingTypeLabel(type: FundingType | string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  if (!type) return "";
+  return FUNDING_TYPE_LABELS[type as FundingType]?.[lang] ?? String(type);
+}
+
+// Common ISO-3166 alpha-2 → Finnish country name. Fallback: the code itself.
+const COUNTRY_FI: Record<string, string> = {
+  FI: "Suomi", SE: "Ruotsi", NO: "Norja", DK: "Tanska", EE: "Viro", LV: "Latvia", LT: "Liettua",
+  DE: "Saksa", FR: "Ranska", GB: "Britannia", NL: "Alankomaat", BE: "Belgia", LU: "Luxemburg",
+  IE: "Irlanti", ES: "Espanja", PT: "Portugali", IT: "Italia", AT: "Itävalta", PL: "Puola",
+  CZ: "Tšekki", SK: "Slovakia", HU: "Unkari", RO: "Romania", BG: "Bulgaria", GR: "Kreikka",
+  HR: "Kroatia", SI: "Slovenia", CH: "Sveitsi", IS: "Islanti", US: "Yhdysvallat", CA: "Kanada",
+  RU: "Venäjä", UA: "Ukraina", CN: "Kiina", JP: "Japani", EU: "Euroopan unioni",
+};
+
+export function countryLabel(code: string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  if (!code) return "";
+  const c = code.toUpperCase();
+  if (lang === "fi") return COUNTRY_FI[c] ?? c;
+  return c;
+}
 
 export const ENTITY_TYPE_LABELS: Record<EntityType, Label> = {
   PERSON: { fi: "Henkilö", en: "Person" },

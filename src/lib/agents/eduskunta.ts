@@ -2,7 +2,7 @@
 // Source: https://avoindata.eduskunta.fi/api/v1/ (OFFICIAL_PRIMARY).
 
 import { EntityType, RelationshipType, SourceType } from "@prisma/client";
-import { fetchJsonLatin1Retry } from "./http";
+import { fetchJsonRetry } from "./http";
 import type { NormalizedFact, SourceAdapter } from "./types";
 
 const API = "https://avoindata.eduskunta.fi";
@@ -106,7 +106,7 @@ export const eduskuntaAdapter: SourceAdapter = {
     "yksityiskohtaiset tiedot: puolue, valiokunnat, ministeriys, koulutukset.",
 
   async discover(ctx) {
-    const seating = await fetchJsonLatin1Retry<SeatingRow[]>(`${BASE}/seating/`);
+    const seating = await fetchJsonRetry<SeatingRow[]>(`${BASE}/seating/`);
     ctx.log(`seating list: ${seating.length} members`);
     return seating.map((row) => ({
       id: String(row.hetekaId),
@@ -118,7 +118,7 @@ export const eduskuntaAdapter: SourceAdapter = {
   },
 
   async fetch(_ctx, doc) {
-    return fetchJsonLatin1Retry<unknown>(doc.url, { maxRetries: 3 });
+    return fetchJsonRetry<unknown>(doc.url, { maxRetries: 3 });
   },
 
   async parse(_ctx, doc, raw) {

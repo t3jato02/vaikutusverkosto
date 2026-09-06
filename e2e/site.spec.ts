@@ -66,10 +66,10 @@ test.describe("person profile", () => {
     page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
     await page.goto(href!);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "VERKOSTO", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "ORGANISAATIOYHTEYDET" })).toBeVisible();
-    // Graph fallback: relationship list must be accessible as text.
-    await expect(page.getByText("Näytä lähde").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Verkosto", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Yhteydet", exact: true })).toBeVisible();
+    // Graph fallback: the relationship list (with per-row evidence) is text-accessible.
+    await expect(page.getByRole("button", { name: "Näytä todiste" }).first()).toBeVisible();
     expect(errors).toEqual([]);
   });
 });

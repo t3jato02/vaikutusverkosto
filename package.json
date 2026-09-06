@@ -25,7 +25,8 @@
     "ingest:seed": "tsx scripts/seed-demo.ts",
     "registry:sync": "tsx scripts/sync-source-registry.ts",
     "seed:countries": "tsx scripts/seed-countries.ts",
-    "release:gate": "node scripts/release-gate.mjs"
+    "release:gate": "node scripts/release-gate.mjs",
+    "fix:mojibake": "tsx scripts/fix-mojibake.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",

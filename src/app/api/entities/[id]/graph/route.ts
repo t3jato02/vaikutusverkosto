@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEntityGraph, resolveShortId } from "@/lib/queries";
-import { relationshipLabel, flowLabel } from "@/lib/constants";
+import { flowLabel } from "@/lib/constants";
+import { relationshipPhrase } from "@/lib/labels";
 import { rateLimit, tooManyRequests } from "@/lib/rateLimit";
 import type { RelationshipType, FlowType } from "@prisma/client";
 
@@ -34,13 +35,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     target: string;
     type: string;
     label: string;
+    labelIn: string;
     role?: string | null;
     startDate: string | null;
     endDate: string | null;
     confidence: string;
+    verificationStatus: string;
+    temporalState: string;
     amount: number | null;
     flow: boolean;
     sourceUrl: string | null;
+    sourceName: string | null;
   }[] = g.relationships.map((r) => {
     edgeTypes.add(r.relationshipType);
     return {
@@ -48,14 +53,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       source: r.sourceEntityId,
       target: r.targetEntityId,
       type: r.relationshipType as RelationshipType,
-      label: relationshipLabel(r.relationshipType as RelationshipType),
+      label: relationshipPhrase(r.relationshipType as RelationshipType, "out"),
+      labelIn: relationshipPhrase(r.relationshipType as RelationshipType, "in"),
       role: r.role,
       startDate: r.startDate?.toISOString() ?? null,
       endDate: r.endDate?.toISOString() ?? null,
       confidence: r.confidence,
+      verificationStatus: r.verificationStatus,
+      temporalState: r.temporalState,
       amount: r.amount ? Number(r.amount) : null,
       flow: false,
       sourceUrl: r.evidence[0]?.source?.sourceUrl ?? null,
+      sourceName: r.evidence[0]?.source?.sourceName ?? null,
     };
   });
   for (const f of g.flows) {
@@ -66,12 +75,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       target: f.recipientEntityId,
       type: `FLOW:${f.flowType}`,
       label: flowLabel(f.flowType as FlowType),
+      labelIn: flowLabel(f.flowType as FlowType),
       startDate: f.flowDate?.toISOString() ?? f.periodStart?.toISOString() ?? null,
       endDate: f.periodEnd?.toISOString() ?? null,
       confidence: f.confidence,
+      verificationStatus: f.verificationStatus,
+      temporalState: f.periodEnd && f.periodEnd < new Date() ? "HISTORICAL" : "CURRENT",
       amount: Number(f.amount),
       flow: true,
       sourceUrl: f.evidence[0]?.source?.sourceUrl ?? null,
+      sourceName: f.evidence[0]?.source?.sourceName ?? null,
     });
   }
 
