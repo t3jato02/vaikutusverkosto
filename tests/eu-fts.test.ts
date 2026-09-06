@@ -61,6 +61,15 @@ describe("EU FTS parser (Sprint C2)", () => {
     expect(f.periodStart).toBeInstanceOf(Date);
   });
 
+  it("classifies the Finnish State beneficiary as GOVERNMENT_BODY / GOVERNMENT (Phase 18)", async () => {
+    const [f] = await euFtsAdapter.parse(ctx, doc, rec({ name: "SUOMEN TASAVALTA*REPUBLIQUE DE FINLANDE REPUBLIC OF FINLAND", vat: "" }));
+    expect(f.target.type).toBe("GOVERNMENT_BODY");
+    expect(f.target.entityCategory).toBe("GOVERNMENT");
+    // a normal company is unaffected
+    const [g] = await euFtsAdapter.parse(ctx, doc, rec({ name: "TEST OY" }));
+    expect(g.target.type).toBe("ORGANIZATION");
+  });
+
   it("maps a service/advisory contract to PROCUREMENT", async () => {
     const facts = await euFtsAdapter.parse(ctx, doc, rec({ contractType: "Advisory: non-IT" }));
     expect(facts[0].fundingType).toBe("PROCUREMENT");

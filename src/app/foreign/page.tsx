@@ -119,6 +119,34 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
         </ul>
       </section>
 
+      {overview.byYear.length > 0 && (
+        <section aria-label="Dokumentoitu ulkomainen rahoitus vuosittain">
+          <h2 className="section-title mb-2">Dokumentoitu ulkomainen rahoitus vuosittain</h2>
+          <p className="mb-2 text-[11px] text-muted">
+            Summat suoraan lähdeaineiston raportointivuosilta. Väliin jääviä vuosia ei arvioida
+            eikä interpoloida — näytämme vain ne vuodet, joilta on dokumentoituja rahavirtoja.
+          </p>
+          <ul className="card divide-y divide-line">
+            {(() => {
+              const max = Math.max(...overview.byYear.map((y) => y.amount), 1);
+              return overview.byYear.map((y) => (
+                <li key={y.year} className="py-2 text-sm">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="tabular-nums font-medium">{y.year}</span>
+                    <span className="shrink-0 tabular-nums text-muted">
+                      {formatEur(y.amount)} · {y.flowCount} {y.flowCount === 1 ? "virta" : "virtaa"}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-line">
+                    <div className="h-full rounded bg-accent" style={{ width: `${Math.round((y.amount / max) * 100)}%` }} />
+                  </div>
+                </li>
+              ));
+            })()}
+          </ul>
+        </section>
+      )}
+
       {flows.length > 0 && (
         <section aria-label="Rahavirtojen verkosto">
           <h2 className="section-title mb-2">Rahavirtojen verkosto</h2>
@@ -187,7 +215,7 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
       </section>
 
       <section aria-label="Suurimmat vastaanottajat">
-        <h2 className="section-title mb-2">Suurimmat vastaanottajat</h2>
+        <h2 className="section-title mb-2">Suurimmat dokumentoidun rahoituksen vastaanottajat</h2>
         <ul className="card divide-y divide-line">
           {overview.topRecipients.length === 0 && <li className="py-3 text-sm text-muted">—</li>}
           {overview.topRecipients.map((r) => {

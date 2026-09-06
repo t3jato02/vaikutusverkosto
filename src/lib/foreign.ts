@@ -135,13 +135,18 @@ export async function foreignFundingGraph(f: ForeignFundingFilters & { limit?: n
 
 export async function foreignFundingOverview(f: ForeignFundingFilters = {}) {
   const where = buildForeignFundingWhere(f);
-  const [total, byCountry, byType, topRecipients, countries] = await Promise.all([
+  const [total, byCountry, byType, byYearRaw, topRecipients, countries] = await Promise.all([
     db.financialFlow.aggregate({ where, _sum: { amount: true }, _count: { _all: true } }),
     db.financialFlow.groupBy({ by: ["funderCountryCode"], where, _sum: { amount: true }, _count: { _all: true }, orderBy: { _sum: { amount: "desc" } } }),
     db.financialFlow.groupBy({ by: ["fundingType"], where, _sum: { amount: true }, _count: { _all: true }, orderBy: { _sum: { amount: "desc" } } }),
+    // Per-year totals straight from the data — reporting years only, never interpolated.
+    db.financialFlow.groupBy({ by: ["periodYear"], where, _sum: { amount: true }, _count: { _all: true }, orderBy: { periodYear: "asc" } }),
     db.financialFlow.groupBy({ by: ["recipientEntityId"], where, _sum: { amount: true }, _count: { _all: true }, orderBy: { _sum: { amount: "desc" } }, take: 10 }),
     db.country.findMany({ orderBy: { name: "asc" } }),
   ]);
+  const byYear = byYearRaw
+    .filter((y) => y.periodYear != null)
+    .map((y) => ({ year: y.periodYear as number, amount: Number(y._sum.amount ?? 0), flowCount: y._count._all }));
   const recipientEntities = topRecipients.length
     ? await db.entity.findMany({
         where: { id: { in: topRecipients.map((r) => r.recipientEntityId) } },
@@ -154,6 +159,7 @@ export async function foreignFundingOverview(f: ForeignFundingFilters = {}) {
     countryCount: byCountry.filter((c) => c.funderCountryCode).length,
     byCountry,
     byType,
+    byYear,
     topRecipients,
     recipientEntities,
     countries,

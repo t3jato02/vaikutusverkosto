@@ -29,7 +29,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const sp = await searchParams;
   const scope = (SCOPES.find((s) => s.value === sp.scope)?.value ?? "funding") as GraphScope;
   const temporal = (TEMPORAL.find((t) => t.value === sp.temporal)?.value ?? "current") as Temporal;
-  const metric = sp.metric === "betweenness" ? "byBetweenness" : sp.metric === "weighted" ? "byWeightedDegree" : "byDegree";
+  const metricKey = (sp.metric === "betweenness" ? "betweenness" : sp.metric === "weighted" ? "weighted" : "degree") as
+    | "degree" | "weighted" | "betweenness";
+  const metric = metricKey === "betweenness" ? "byBetweenness" : metricKey === "weighted" ? "byWeightedDegree" : "byDegree";
 
   const a = await networkAnalytics(scope, temporal, {
     fromYear: sp.fromYear ? Number(sp.fromYear) : undefined,
@@ -37,6 +39,26 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   });
   const rows = a.top[metric as keyof typeof a.top];
   const isMoney = scope === "funding" || scope === "international";
+
+  // Human-readable names for the structural metrics. These describe the shape of
+  // the selected network — never a person's conduct.
+  const METRIC_LABELS: Record<typeof metricKey, { short: string; help: string }> = {
+    degree: {
+      short: "Yhteyksien määrä verkossa",
+      help: "Kuinka moneen muuhun toimijaan tällä solmulla on suora dokumentoitu yhteys tässä verkossa.",
+    },
+    weighted: {
+      short: isMoney ? "Dokumentoitujen rahayhteyksien paino" : "Painotettu yhteysmäärä",
+      help: isMoney
+        ? "Solmuun kytkeytyvien dokumentoitujen rahavirtojen yhteissumma euroina. Summa ei kerro rahan käyttötarkoituksesta."
+        : "Yhteyksien määrä painotettuna yhteyden tyypillä.",
+    },
+    betweenness: {
+      short: "Verkoston välittäjäasema",
+      help: "Kuinka usein solmu on lyhimmällä polulla kahden muun toimijan välillä. Korkea arvo = rakenteellinen väliasema tiedon tai resurssien kulussa.",
+    },
+  };
+  const activeMetric = METRIC_LABELS[metricKey];
 
   const q = (o: Record<string, string>) =>
     "?" + new URLSearchParams({ scope, temporal, metric: sp.metric ?? "degree", ...o }).toString();
@@ -75,15 +97,21 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         ))}
         <span className="ml-3 text-ink-500">Mittari:</span>
         {[
-          { k: "degree", l: "Astekeskeisyys" },
-          { k: "weighted", l: isMoney ? "Painotettu (€)" : "Painotettu" },
-          { k: "betweenness", l: "Välittäjäasema" },
+          { k: "degree", l: METRIC_LABELS.degree.short },
+          { k: "weighted", l: METRIC_LABELS.weighted.short },
+          { k: "betweenness", l: METRIC_LABELS.betweenness.short },
         ].map((m) => (
-          <Link key={m.k} href={q({ metric: m.k })} className={`rounded px-2 py-0.5 ${(sp.metric ?? "degree") === m.k ? "bg-ink-900 text-white" : "bg-ink-100 text-ink-600"}`}>
+          <Link key={m.k} href={q({ metric: m.k })} className={`rounded px-2 py-0.5 ${metricKey === m.k ? "bg-ink-900 text-white" : "bg-ink-100 text-ink-600"}`}>
             {m.l}
           </Link>
         ))}
       </div>
+
+      <p className="max-w-3xl rounded border border-ink-100 bg-ink-50 p-2 text-[11px] text-ink-600">
+        <strong>{activeMetric.short}.</strong> {activeMetric.help} Korkea sija tässä listassa{" "}
+        <strong>ei</strong> tarkoita väärinkäytöstä, korruptiota, lainvastaisuutta tai epäasiallista
+        vaikuttamista — se kuvaa vain toimijan asemaa dokumentoitujen yhteyksien verkossa.
+      </p>
 
       <section aria-label="Tulokset">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -91,11 +119,20 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           <details className="text-[11px]">
             <summary className="cursor-pointer text-accent">Miten tämä laskettiin?</summary>
             <div className="mt-1 rounded border border-ink-100 bg-ink-50 p-2 text-ink-600">
-              <p>Algoritmi: {a.algorithm} (v{a.algorithmVersion})</p>
-              <p>Graafin laajuus: {SCOPES.find((s) => s.value === scope)!.desc}</p>
-              <p>Aikasuodatus: {temporal} · vahvistetut yhteydet</p>
+              <p>Verkko: {SCOPES.find((s) => s.value === scope)!.label} — {SCOPES.find((s) => s.value === scope)!.desc}</p>
+              <p>
+                Ajallinen rajaus:{" "}
+                {temporal === "current"
+                  ? "vain nykyiset (CURRENT) yhteydet — päättyneet jätetty pois"
+                  : temporal === "historical"
+                    ? "vain historialliset (HISTORICAL) yhteydet"
+                    : "kaikki yhteydet (CURRENT + HISTORICAL)"}
+              </p>
+              <p>Mukana vain julkisesti näkyvät, lähteellä vahvistetut yhteydet.</p>
+              <p>Algoritmi: {a.algorithm}</p>
+              <p>Algoritmiversio: v{a.algorithmVersion}</p>
               <p>Solmuja: {a.nodeCount} · viivoja: {a.edgeCount}</p>
-              <p>Laskettu: {new Date(a.calculatedAt).toLocaleString("fi-FI")} {a.cached ? "(välimuistista)" : ""}</p>
+              <p>Laskettu: {new Date(a.calculatedAt).toLocaleString("fi-FI")} {a.cached ? "(välimuistista)" : "(tuore laskenta)"}</p>
               <p className="mt-1 italic">
                 Korkea arvo tarkoittaa, että solmu kytkee rakenteellisesti valitun verkon osia. Se ei
                 tarkoita väärinkäytöstä, korruptiota tai epäasiallista vaikuttamista.
@@ -115,9 +152,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                 <span className="ml-2 text-[11px] text-ink-400">{r.type}</span>
               </span>
               <span className="flex shrink-0 flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-ink-500">
-                <span>aste {r.degree}</span>
-                <span>{isMoney ? formatEur(r.weightedDegree) : `p. ${r.weightedDegree}`}</span>
-                <span>väl. {r.betweenness}</span>
+                <span title="Yhteyksien määrä verkossa">{r.degree} yhteyttä</span>
+                <span title={isMoney ? "Dokumentoitujen rahayhteyksien paino" : "Painotettu yhteysmäärä"}>
+                  {isMoney ? formatEur(r.weightedDegree) : `paino ${r.weightedDegree}`}
+                </span>
+                <span title="Verkoston välittäjäasema">välittäjä {r.betweenness}</span>
               </span>
             </li>
           ))}
