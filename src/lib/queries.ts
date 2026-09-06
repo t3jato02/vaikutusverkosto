@@ -60,9 +60,11 @@ export async function searchEntities(q: string, limit = 25): Promise<SearchResul
       { description: { contains: term, mode: "insensitive" as const } },
     ],
   };
+  // Over-fetch, then rank in JS so a whole-word / prefix hit (e.g. "Orpo" →
+  // "Petteri Orpo") beats an incidental mid-word substring ("...Corporation").
   const entities = await db.entity.findMany({
     where,
-    take: limit,
+    take: Math.min(limit * 6, 150),
     orderBy: [{ sourceCount: "desc" }, { updatedAt: "desc" }],
     select: {
       id: true,
@@ -75,7 +77,20 @@ export async function searchEntities(q: string, limit = 25): Promise<SearchResul
       organization: { select: { headquarters: true } },
     },
   });
-  return entities.map((e) => {
+  const t = term.toLowerCase();
+  const wordBoundary = new RegExp(`(^|[^\\p{L}])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "iu");
+  const matchRank = (name: string): number => {
+    const n = name.toLowerCase();
+    if (n === t) return 0;
+    if (n.startsWith(t)) return 1;
+    if (wordBoundary.test(name)) return 2;
+    return 3;
+  };
+  const ranked = entities
+    .map((e) => ({ e, r: matchRank(e.canonicalName) }))
+    .sort((a, b) => a.r - b.r || (b.e.sourceCount ?? 0) - (a.e.sourceCount ?? 0))
+    .slice(0, limit);
+  return ranked.map(({ e }) => {
     const subtitle =
       e.person?.electoralDistrict ??
       e.organization?.headquarters ??

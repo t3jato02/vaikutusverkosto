@@ -144,15 +144,15 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         <ul className="card divide-y divide-ink-100">
           {rows.length === 0 && <li className="py-3 text-sm text-ink-500">Ei dataa tälle verkolle näillä suodattimilla.</li>}
           {rows.map((r, i) => (
-            <li key={r.entityId} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-              <span className="min-w-0 break-words">
+            <li key={r.entityId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm">
+              <span className="min-w-0 flex-1 basis-full [overflow-wrap:anywhere] sm:basis-auto">
                 <span className="mr-2 tabular-nums text-ink-400">{i + 1}.</span>
                 <Link href={entityUrlFor(r.entityId, r.type as EntityType, r.name)} className="font-medium text-accent hover:underline">
                   {r.name}
                 </Link>
                 <span className="ml-2 text-[11px] text-ink-400">{entityLabel(r.type as EntityType)}</span>
               </span>
-              <span className="flex shrink-0 flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-ink-500">
+              <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-ink-500">
                 <span title="Yhteyksien määrä verkossa">{r.degree} yhteyttä</span>
                 <span title={isMoney ? "Dokumentoitujen rahayhteyksien paino" : "Painotettu yhteysmäärä"}>
                   {isMoney ? formatEur(r.weightedDegree) : `paino ${r.weightedDegree}`}
