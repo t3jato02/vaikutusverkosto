@@ -136,6 +136,70 @@ export function sourceHealth(row: { enabled: boolean; consecutiveFailures: numbe
   return "HEALTHY";
 }
 
+const CADENCE_MS: Record<string, number> = {
+  daily: 24 * 3600_000,
+  weekly: 7 * 24 * 3600_000,
+  monthly: 30 * 24 * 3600_000,
+};
+
+/** When this source is next expected to run, from its last check + cadence. */
+export function nextDueAt(row: { lastCheckedAt: Date | null; updateCadence: string }): Date | null {
+  if (!row.lastCheckedAt) return null;
+  const step = CADENCE_MS[row.updateCadence] ?? CADENCE_MS.daily;
+  return new Date(row.lastCheckedAt.getTime() + step);
+}
+
+export interface SourceAlert {
+  level: "OK" | "WARNING" | "DEGRADED" | "FAILING";
+  reasons: string[];
+}
+
+/**
+ * Operator-facing alert for a source. Beyond the raw failure streak this flags a
+ * previously-healthy source that has gone quiet: a run that found zero documents,
+ * a detected source-schema drift, or an overdue run. A source must never
+ * silently stop producing data.
+ */
+export function sourceAlert(row: {
+  enabled: boolean;
+  consecutiveFailures: number;
+  lastSuccessAt: Date | null;
+  lastCheckedAt: Date | null;
+  lastError: string | null;
+  lastRunDocsChecked: number;
+  updateCadence: string;
+}): SourceAlert {
+  if (!row.enabled) return { level: "OK", reasons: [] };
+  const reasons: string[] = [];
+  let level: SourceAlert["level"] = "OK";
+  const bump = (l: SourceAlert["level"]) => {
+    const order = { OK: 0, WARNING: 1, DEGRADED: 2, FAILING: 3 } as const;
+    if (order[l] > order[level]) level = l;
+  };
+
+  if (/schema drift/i.test(row.lastError ?? "")) {
+    reasons.push("lähteen skeema on muuttunut — ingestointi pysäytetty turvallisesti");
+    bump("FAILING");
+  }
+  if (row.consecutiveFailures >= 3) {
+    reasons.push(`${row.consecutiveFailures} peräkkäistä epäonnistunutta ajoa`);
+    bump("FAILING");
+  } else if (row.consecutiveFailures > 0) {
+    reasons.push(`${row.consecutiveFailures} peräkkäistä epäonnistunutta ajoa`);
+    bump("DEGRADED");
+  }
+  if (row.lastSuccessAt && row.consecutiveFailures === 0 && row.lastRunDocsChecked === 0) {
+    reasons.push("viimeisin ajo ei löytänyt yhtään dokumenttia (aiemmin toiminut lähde)");
+    bump("WARNING");
+  }
+  const due = nextDueAt(row);
+  if (due && Date.now() - due.getTime() > CADENCE_MS.daily) {
+    reasons.push(`ajo myöhässä — odotettu ${due.toISOString().slice(0, 10)}`);
+    bump("WARNING");
+  }
+  return { level, reasons };
+}
+
 /** Is this source allowed to run right now? */
 export async function isSourceEnabled(adapterId: string, client: PrismaClient = db): Promise<boolean> {
   const row = await client.ingestionSource.findUnique({ where: { id: adapterId }, select: { enabled: true } });
