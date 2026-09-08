@@ -91,6 +91,18 @@ export default async function MediaHubPage() {
         <Link href="/compare" className="btn-primary">Vertaa →</Link>
       </section>
 
+      <section aria-label="Kansallisuuskehytysvertailu" className="card flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-ink-900">Kansallisuus- ja paikallisuuskehytys</h2>
+          <p className="mt-1 text-xs text-ink-500">
+            Mittaa, miten mediat käyttävät kansallisuus- ja paikallisuusnimityksiä: ilmaukset, dokumentoidut
+            syntymämaat ja käänteistapausvertailu.{" "}
+            <Link href="/methodology#identity-framing" className="text-accent hover:underline">Menetelmät →</Link>
+          </p>
+        </div>
+        <Link href="/media/identity-framing" className="btn-primary">Vertaa →</Link>
+      </section>
+
       <TrustLegend />
     </div>
   );

@@ -7,6 +7,7 @@ import { relationshipPhrase, temporalLabel, verificationLabel } from "@/lib/labe
 import { formatDateLong } from "@/lib/format";
 import CandidateReviewPanel, { type ReviewCandidate } from "@/components/admin/CandidateReviewPanel";
 import type { RelationshipType } from "@prisma/client";
+import { listIdentityReviewQueue } from "@/lib/analysis/identity/review";
 
 /** Build the rich per-candidate context the review panel renders. */
 async function buildReviewCandidates(
@@ -164,6 +165,7 @@ export default async function AdminReviewPage() {
   ]);
   const conflicts = await db.sourceConflict.findMany({ where: { status: "OPEN" }, orderBy: { createdAt: "asc" }, take: 30 });
   const reviewCandidates = await buildReviewCandidates(relCandidates);
+  const identityQueue = await listIdentityReviewQueue(60);
 
   return (
     <div className="space-y-8">
@@ -323,6 +325,50 @@ export default async function AdminReviewPage() {
                   { value: "reject", label: "Hylkää" },
                 ]}
               />
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section aria-label="Syntymämaa- ja identiteettitiedot">
+        <h2 className="card-title mb-2">SYNTYMÄMAA- JA IDENTITEETTITIEDOT ODOTTAA TARKISTUSTA ({identityQueue.length})</h2>
+        <p className="mb-2 text-[11px] text-ink-500">
+          Syntymämaa, kansalaisuus, asuinmaa, henkilön oma identiteetti ja media-ilmaukset.
+          Julkaisu vaatii aina ihmisen tarkistuksen — epävarmaa henkilötason väitettä ei julkaista
+          faktana. Media-ilmaukset säilyvät sanatarkasti.
+        </p>
+        <ul className="card divide-y divide-ink-100">
+          {identityQueue.length === 0 && <li className="py-3 text-sm text-ink-500">Ei odottavia identiteettitietoja.</li>}
+          {identityQueue.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
+              <div className="min-w-0">
+                <span className="rounded bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase">{c.label}</span>{" "}
+                <span className="font-semibold text-ink-900">{c.personName}</span>
+                <span className="text-ink-500"> — {c.value}</span>
+                {c.detail && <p className="text-ink-400">{c.detail}</p>}
+                <p className="text-ink-300">
+                  lähde:{" "}
+                  {c.sourceUrl ? (
+                    <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                      {c.sourceName ?? c.sourceUrl}
+                    </a>
+                  ) : (
+                    <span>{c.sourceName}</span>
+                  )}
+                  {c.evidenceGrade ? ` · Lähde ${c.evidenceGrade}` : ""}
+                  {c.confidence ? ` · luottamus ${c.confidence}` : ""} · {formatDateLong(c.createdAt)}
+                </p>
+              </div>
+              <form action="/api/admin/review" method="post" className="flex flex-wrap items-center gap-1.5">
+                <input type="hidden" name="target" value="identity_fact" />
+                <input type="hidden" name="table" value={c.table} />
+                <input type="hidden" name="id" value={c.id} />
+                {["approve", "dispute", "reject"].map((a) => (
+                  <button key={a} name="action" value={a} className="btn px-2 py-0.5 text-[11px]">
+                    {a === "approve" ? "Julkaise" : a === "dispute" ? "Riitauta" : "Hylkää"}
+                  </button>
+                ))}
+              </form>
             </li>
           ))}
         </ul>

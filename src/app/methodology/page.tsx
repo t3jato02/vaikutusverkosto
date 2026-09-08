@@ -347,6 +347,39 @@ export default function MethodologyPage() {
         </p>
       </Section>
 
+      <Section id="identity-framing" title="Syntymämaa, kansalaisuus ja mediaidentiteetti">
+        <p>
+          Tämä kerros tekee näkyväksi, miten suomalainen media kuvaa ihmisten kansallisuutta, syntyperää,
+          kansalaisuutta ja paikallisuutta. Se on <strong>faktapohjainen</strong> eikä ideologinen
+          luokittelija. Alkuperäinen lähdetieto, juridinen status, median käyttämä ilmaisu ja järjestelmän
+          analyysi ovat erillisiä asioita, joita ei yhdistetä yhdeksi &quot;nationaliteetti&quot;-kentäksi.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li><strong>Syntymämaa on muuttumaton historiallinen tietokenttä.</strong> Se ei muutu muuton, asumisen, kansalaisuuden tai kaksoiskansalaisuuden myötä — eikä sitä kirjoiteta kansalaisuudeksi.</li>
+          <li><strong>Kansalaisuus on erillinen juridinen status.</strong> Se voi olla yksi, useita tai ei tiedossa; saavuusvuosi tallennetaan, jos se on dokumentoitu.</li>
+          <li><strong>Asuinpaikka on erillinen muuttuva tieto.</strong> Syntymämaa ≠ asuinmaa ≠ kansalaisuus.</li>
+          <li><strong>Henkilön oma identiteetti on erillinen tieto</strong>, tallennettu vain eksplisiittisestä julkisesta lähteestä, sanatarkasti.</li>
+          <li><strong>Median käyttämä nimitys on toimituksellinen havainto</strong> — säilytetään sanatarkasti ja kontekstin kanssa, eikä se ole henkilön ominaisuus.</li>
+        </ul>
+        <p className="mt-2">
+          Järjestelmä <strong>ei päättele</strong> syntymämaata, syntyperää, etnisyyttä, uskontoa, kansalaisuutta
+          tai maahanmuuttajataustaa nimestä, kielestä, kuvasta tai ulkonäöstä. Jos tietoa ei ole, tulos on{" "}
+          <em>&quot;Ei vahvistettua tietoa&quot;</em> — ei tekoälyn arvaus. Järjestelmä ei muuta syntymämaata
+          kansalaisuudeksi eikä päinvastoin.
+        </p>
+        <p className="mt-2">
+          Media-analyysi <strong>mittaa sanastoa</strong> eikä oleta puolueellisuutta etukäteen: se kerää
+          aineiston (media, toimittaja, vuosi, aihe, henkilön dokumentoidut taustamuuttujat) ja näyttää erot
+          vain, jos ne ovat aineistossa. Negatiivinen uutinen henkilöstä ei ole ryhmäkohtainen asenne, eikä
+          positiivinen uutinen ole poliittista suosimista. <strong>Sanavalinta ei ole sentimenttiä.</strong>
+        </p>
+        <p className="mt-2">
+          Kaikki henkilötason faktat kantavat provenance-tiedot: lähde-URL, julkaisija, julkaisupäivä, noutoaika,
+          tarkka ote, evidenssiluokka (A–E), luottamus ja tarkistustila. Media-ilmaukset (ja niiden luokittelu)
+          ovat versioituja ja uudelleenlaskettavissa; epävarma luokittelu menee tarkistusjonoon.
+        </p>
+      </Section>
+
       <Section id="corrections" title="Korjauskäytäntö">
         <p>
           Jokaisella profiililla on &ldquo;Ilmoita virheestä&rdquo;. Korjaukset käsitellään avoimesti,
