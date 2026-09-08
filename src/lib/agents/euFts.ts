@@ -13,8 +13,8 @@
 import { mkdtempSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EntityType, FlowType, FundingType, SourceType } from "@prisma/client";
-import type { NormalizedFact, SourceAdapter, SourceDocument } from "./types";
+import { EntityType, FlowType, FundingType, SourceType, type Prisma, type PrismaClient } from "@prisma/client";
+import type { NormalizedFact, RunContext, SourceAdapter, SourceDocument } from "./types";
 
 const DATASET_URL = (year: number) =>
   `https://ec.europa.eu/budget/financial-transparency-system/download/${year}_FTS_dataset_en.xlsx`;
@@ -205,6 +205,99 @@ function projectRefOf(r: FtsRecord) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Resumable discovery (Sprint C2 hotfix).
+//
+// `discover()` used to re-download + re-stream-parse both ~20 MB XLSX files on
+// every tick. On Vercel that alone exceeded the function limit, so the pipeline
+// never reached the publish phase and `/foreign` stayed empty forever.
+//
+// Fix: the first tick that sees an uncached year downloads + parses it and
+// persists every parsed record straight away as a PENDING SourceDocument
+// (contentHash "" is a sentinel — the collector recomputes it on first real
+// processing, so the row reads as "changed" and the flow is published; on a
+// second run the hash matches and the row is "unchanged", so nothing is
+// duplicated). Later ticks rebuild the descriptor list from those rows with a
+// cheap DB read and no network. A year older than the cadence window is
+// re-pulled so a genuine monthly refresh still picks up new records.
+// ---------------------------------------------------------------------------
+const FTS_SOURCE_ID = "eu-fts-agent";
+// Just under the "monthly" cadence window (see scheduler CADENCE_MAX_AGE_MS) so
+// a scheduled refresh re-downloads instead of serving a stale cache.
+export const FTS_CACHE_MAX_AGE_MS = 26 * 24 * 60 * 60 * 1000;
+
+type FtsDb = Pick<PrismaClient, "sourceDocument">;
+
+function descriptorFromRow(r: {
+  externalId: string;
+  canonicalUrl: string;
+  title: string | null;
+  metadata: unknown;
+}): SourceDocument | null {
+  const meta = (r.metadata as { meta?: FtsRecord } | null)?.meta;
+  if (!meta) return null;
+  return { id: r.externalId, url: r.canonicalUrl, title: r.title ?? "", publishedAt: null, hash: "", meta };
+}
+
+/** A year is cached when it has at least one persisted row newer than the cadence window. */
+export async function ftsYearCached(db: FtsDb, year: number, now = Date.now()): Promise<boolean> {
+  const row = await db.sourceDocument.findFirst({
+    where: { ingestionSourceId: FTS_SOURCE_ID, externalId: { startsWith: `eu-fts:${year}:` } },
+    select: { firstSeenAt: true },
+    orderBy: { firstSeenAt: "desc" },
+  });
+  return !!row && now - row.firstSeenAt.getTime() < FTS_CACHE_MAX_AGE_MS;
+}
+
+/** Rebuild the full descriptor list from persisted SourceDocument rows (no network). */
+export async function cachedFtsDescriptors(db: FtsDb): Promise<SourceDocument[]> {
+  const rows = await db.sourceDocument.findMany({
+    where: { ingestionSourceId: FTS_SOURCE_ID },
+    select: { externalId: true, canonicalUrl: true, title: true, metadata: true },
+  });
+  const out: SourceDocument[] = [];
+  for (const r of rows) {
+    const d = descriptorFromRow(r);
+    if (d) out.push(d);
+  }
+  return out;
+}
+
+/** Persist parsed descriptors up-front so a later tick can skip the download. */
+export async function persistFtsDescriptors(db: FtsDb, docs: SourceDocument[]): Promise<number> {
+  const CHUNK = 500;
+  let written = 0;
+  for (let i = 0; i < docs.length; i += CHUNK) {
+    const slice = docs.slice(i, i + CHUNK);
+    const res = await db.sourceDocument.createMany({
+      data: slice.map((d) => ({
+        ingestionSourceId: FTS_SOURCE_ID,
+        externalId: d.id,
+        canonicalUrl: d.url,
+        documentType: "json",
+        title: d.title || null,
+        contentHash: "", // sentinel; the collector fills it on first processing
+        metadata: { meta: d.meta } as Prisma.InputJsonValue,
+        rawJson: (d.meta ?? null) as Prisma.InputJsonValue,
+      })),
+      skipDuplicates: true,
+    });
+    written += res.count;
+  }
+  return written;
+}
+
+function ftsDescriptorsForYear(year: number, records: FtsRecord[]): SourceDocument[] {
+  return records.map((r) => ({
+    id: recordKey(r),
+    url: `${DATASET_URL(year)}#${encodeURIComponent(r.lc || r.budgetRef || r.name)}`,
+    title: `EU FTS ${year} — ${r.name} (${r.lc || r.budgetRef})`,
+    publishedAt: null,
+    hash: "",
+    meta: r as unknown,
+  }));
+}
+
 export const euFtsAdapter: SourceAdapter = {
   id: "eu-fts-agent",
   name: "EU Financial Transparency System — suomalaiset EU-varojen saajat",
@@ -221,27 +314,25 @@ export const euFtsAdapter: SourceAdapter = {
     "XLSX-jäsennys. Jokaisesta rivistä evidensoitu FinancialFlow (Euroopan komissio → suomalainen " +
     "saaja), funderCountryCode = EU, isForeign = true. Vain amount > 0.",
 
-  async discover(ctx): Promise<SourceDocument[]> {
-    const docs: SourceDocument[] = [];
+  async discover(ctx: RunContext): Promise<SourceDocument[]> {
+    const db = ctx.db;
     for (const year of YEARS) {
+      // Skip the ~20 MB download+parse when this year is already persisted and
+      // still inside the cadence window.
+      if (await ftsYearCached(db, year)) continue;
       try {
         const path = await ensureXlsx(year, ctx.log);
         const records = await streamFinnishRecords(path, year, ctx.log);
-        for (const r of records) {
-          docs.push({
-            id: recordKey(r),
-            url: `${DATASET_URL(year)}#${encodeURIComponent(r.lc || r.budgetRef || r.name)}`,
-            title: `EU FTS ${year} — ${r.name} (${r.lc || r.budgetRef})`,
-            publishedAt: null,
-            hash: "",
-            meta: r,
-          });
-        }
+        const yearDocs = ftsDescriptorsForYear(year, records);
+        const written = await persistFtsDescriptors(db, yearDocs);
+        ctx.log(`FTS ${year}: persisted ${written}/${yearDocs.length} descriptors`);
       } catch (e) {
         // One year failing must not corrupt the others.
         ctx.log(`FTS ${year}: skipped — ${(e as Error).message}`);
       }
     }
+    const docs = await cachedFtsDescriptors(db);
+    ctx.log(`discovery: ${docs.length} descriptors available (persisted cache)`);
     return docs;
   },
 
