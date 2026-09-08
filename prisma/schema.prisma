@@ -112,6 +112,15 @@ model Entity {
   vaikutaContacts               VaikutaContactMethod[]
   decisionEntity                Decision? @relation("DecisionEntity") // the matching DECISION entity (VAIKUTA)
 
+  // Identity framing (Syntymämaa & media-identiteetti) module.
+  birthOriginFacts        BirthOriginFact[]        @relation("BirthOriginPerson")
+  citizenshipFacts        CitizenshipFact[]        @relation("CitizenshipPerson")
+  residenceFacts          ResidenceFact[]          @relation("ResidencePerson")
+  selfIdentifications     SelfIdentificationFact[] @relation("SelfIdPerson")
+  identityMentions        MediaIdentityMention[]   @relation("IdentityMentionPerson")
+  identityMentionOutlets  MediaIdentityMention[]   @relation("IdentityMentionOutlet")
+  identityMentionAuthors  MediaIdentityMention[]   @relation("IdentityMentionJournalist")
+
   @@index([canonicalName])
   @@index([type, status])
   @@index([municipality])
@@ -297,6 +306,300 @@ model PoliticalAffiliation {
   @@index([reviewStatus])
 }
 
+// ---------------------------------------------------------------- identity framing (Syntymämaa & media-identiteetti)
+//
+// Faktakerros, joka pitää erillään toisistaan:
+//   1. SYNTOMÄMAA/SYNTOMÄPAIKKA  — muuttumaton historiallinen fakta
+//   2. KANSALAISUUS              — juridinen status (voi olla useita)
+//   3. ASUINMAA / ASUMHISTORIA   — muuttuva tieto
+//   4. HENKILÖN OMA IDENTIFIKAATIO — vain eksplisiittisestä julkisesta lähteestä
+//   5. MEDIAN KÄYTTÄMÄ ILMAUS     — toimituksellinen havainto, säilytetään sanatarkasti
+// Nämä kentät EI SAA yhdistää yhdeksi 'nationality'-kentäksi. Mikään näistä ei
+// synny nimestä, kielestä, kuvasta tai ulkonäöstä — vain dokumentoidusta
+// lähteestä. Syntymämaa EI muutu kansalaisuudeksi (eikä päinvastoin).
+
+enum OriginFactKind {
+  BIRTH_COUNTRY // value = ISO-3166 alpha-2, displayValue = maan nimi
+  BIRTH_PLACE // value = paikkakunta, displayValue = paikkakunta (+ alue)
+}
+
+enum CitizenshipStatus {
+  CURRENT
+  FORMER
+  UNKNOWN
+}
+
+enum IdentityReviewStatus {
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+  DISPUTED
+}
+
+// Median käyttämän ilmauksen luokka. Luokka luokittelee ILMAUKSEN tyypin
+// (kansallisuusnimitys vs. juridiikka vs. paikallisuus), EI henkilöä.
+enum MediaIdentityTermCategory {
+  NATIONALITY // suomalainen, nepalilainen
+  CITIZENSHIP // Suomen kansalainen
+  RESIDENCE // Suomessa asuva
+  PLACE_OF_BIRTH // Suomessa syntynyt
+  IMMIGRATION_STATUS // maahanmuuttaja, pakolainen, ulkomaalaistaustainen
+  CITY_IDENTITY // helsinkiläinen
+  REGION_IDENTITY // pohjalainen
+  OTHER
+}
+
+// Muuttumaton syntymämaatausta. Syntymämaa/paikka on historiallinen fakta,
+// joka ei muutu muuton, asumisen, kansalaisuuden tai kaksosikansalaisuuden
+// myötä. Ei koskaan kirjoiteta 'kansalaisuus'-arvoksi.
+model BirthOriginFact {
+  id                 String             @id @default(uuid()) @db.Uuid
+  personEntityId     String             @db.Uuid
+  personEntity       Entity             @relation("BirthOriginPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  factKind           OriginFactKind
+  value              String // BIRTH_COUNTRY => ISO2; BIRTH_PLACE => paikkakunta
+  displayValue       String // ihmislukema (maa- tai paikkakuntanimi)
+  sourceUrl          String
+  sourceName         String
+  publicationDate    DateTime?          @db.Date
+  retrievedAt        DateTime?          @default(now())
+  confidence         Confidence         @default(HIGH)
+  verificationStatus VerificationStatus @default(SOURCE_CONFIRMED)
+  evidenceGrade      EvidenceGrade      @default(C)
+  reviewStatus       IdentityReviewStatus @default(PENDING_REVIEW)
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  createdBy          String?
+  note               String?            @db.Text
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([personEntityId, factKind, value, sourceUrl])
+  @@index([personEntityId])
+  @@index([factKind])
+  @@index([reviewStatus])
+}
+
+// Juridinen kansalaisuus nykyhetkellä/historiassa. Voi olla useampi rivi
+// (kaksoiskansalaisuus: eri countryCode, molemmat CURRENT). Saavuusvuosi
+// vain, jos se on dokumentoitu. Ei johdeta syntymämaasta.
+model CitizenshipFact {
+  id                 String             @id @default(uuid()) @db.Uuid
+  personEntityId     String             @db.Uuid
+  personEntity       Entity             @relation("CitizenshipPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  countryCode        String // ISO-3166 alpha-2
+  countryName        String
+  status             CitizenshipStatus  @default(CURRENT)
+  acquiredYear       Int?
+  endedYear          Int?
+  sourceUrl          String
+  sourceName         String
+  publicationDate    DateTime?          @db.Date
+  retrievedAt        DateTime?          @default(now())
+  confidence         Confidence         @default(HIGH)
+  verificationStatus VerificationStatus @default(SOURCE_CONFIRMED)
+  evidenceGrade      EvidenceGrade      @default(C)
+  reviewStatus       IdentityReviewStatus @default(PENDING_REVIEW)
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  createdBy          String?
+  note               String?            @db.Text
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([personEntityId, countryCode, status, sourceUrl])
+  @@index([personEntityId])
+  @@index([countryCode])
+  @@index([reviewStatus])
+}
+
+// Asuinmaa / asumishistoria. Eri asia kuin syntymämaa ja kansalaisuus.
+// Alku-/loppuaika aina jos dokumentoitu; varmuustaso lähdeperusteinen.
+model ResidenceFact {
+  id                 String             @id @default(uuid()) @db.Uuid
+  personEntityId     String             @db.Uuid
+  personEntity       Entity             @relation("ResidencePerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  countryCode        String? // ISO-3166 alpha-2
+  countryName        String?
+  municipality       String?
+  startDate          DateTime?          @db.Date
+  endDate            DateTime?          @db.Date
+  isCurrent          Boolean            @default(false)
+  sourceUrl          String
+  sourceName         String
+  publicationDate    DateTime?          @db.Date
+  retrievedAt        DateTime?          @default(now())
+  confidence         Confidence         @default(HIGH)
+  verificationStatus VerificationStatus @default(SOURCE_CONFIRMED)
+  evidenceGrade      EvidenceGrade      @default(C)
+  reviewStatus       IdentityReviewStatus @default(PENDING_REVIEW)
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  createdBy          String?
+  note               String?            @db.Text
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([personEntityId, countryCode, municipality, startDate, endDate, sourceUrl])
+  @@index([personEntityId])
+  @@index([countryCode])
+  @@index([reviewStatus])
+}
+
+// Henkilön OMA julkinen identiteettikuvaus: vain eksplisiittisestä julkisesta
+// lähteestä, säilytetään sanatarkasti. Ei koskaan päätelty.
+model SelfIdentificationFact {
+  id                 String             @id @default(uuid()) @db.Uuid
+  personEntityId     String             @db.Uuid
+  personEntity       Entity             @relation("SelfIdPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  identityLabel      String // normalisoitu etiketti, esim. "suomalainen", "helsinkiläinen"
+  verbatimText       String             @db.Text // sanatarkka julkinen lainaus
+  language           String? // ISO-639-1
+  sourceUrl          String
+  sourceName         String
+  publicationDate    DateTime?          @db.Date
+  retrievedAt        DateTime?          @default(now())
+  confidence         Confidence         @default(HIGH)
+  verificationStatus VerificationStatus @default(SOURCE_CONFIRMED)
+  evidenceGrade      EvidenceGrade      @default(C)
+  reviewStatus       IdentityReviewStatus @default(PENDING_REVIEW)
+  reviewedBy         String?
+  reviewedAt         DateTime?
+  createdBy          String?
+  note               String?            @db.Text
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([personEntityId, identityLabel, sourceUrl])
+  @@index([personEntityId])
+  @@index([reviewStatus])
+}
+
+// Median käyttämä ilmaus yhdessä jutussa yhdestä henkilöstä. Ilmaus
+// tallennetaan SANATARKASTI sellaisena kuin se julkaisussa on. Tämä on
+// toimituksellinen havainto — ei henkilön ominaisuus eikä näyttö puolueellisuudesta.
+model MediaIdentityMention {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  personEntityId       String                 @db.Uuid
+  personEntity         Entity                 @relation("IdentityMentionPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  articleId            String                 @db.Uuid
+  article              Article                @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  expression           String // median käyttämä ilmaus, sanatarkka
+  expressionNormalized String // pienellä kirjoitettu, trimattu — ryhmittelyyn
+  termCategory         MediaIdentityTermCategory
+  context              String?                @db.Text // lause/kappalekonteksti (lyhyt sitaatti)
+  inHeadline           Boolean                @default(false)
+  mediaOutletEntityId  String?                @db.Uuid
+  mediaOutletEntity    Entity?                @relation("IdentityMentionOutlet", fields: [mediaOutletEntityId], references: [id], onDelete: SetNull)
+  journalistEntityId   String?                @db.Uuid
+  journalistEntity     Entity?                @relation("IdentityMentionJournalist", fields: [journalistEntityId], references: [id], onDelete: SetNull)
+  publishedAt          DateTime?
+  genre                String? // JournalisticGenre bucket, denormalisoitu
+  // Versioidut analyysimetatiedot (luku 13): uudelleenlaskettavissa.
+  analysisVersion      String                 @default("identity_framing_v1")
+  algorithmVersion     String                 @default("identity_framing_v1")
+  extractor            String                 @default("identity-framing-classifier-v1")
+  modelVersion         String                 @default("lexicon-v1")
+  promptVersion        String                 @default("none")
+  confidence           Float // 0..1 luokittelun jäykkyys — ei "totuustodistus"
+  sourceSnapshot       String? // hash syötteistä (otsikko + excerpt + konteksti)
+  reviewStatus         IdentityReviewStatus   @default(PENDING_REVIEW)
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  note                 String?                @db.Text
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@unique([personEntityId, articleId, expressionNormalized, termCategory])
+  @@index([personEntityId])
+  @@index([articleId])
+  @@index([mediaOutletEntityId])
+  @@index([journalistEntityId])
+  @@index([expressionNormalized])
+  @@index([termCategory])
+  @@index([reviewStatus])
+  @@index([publishedAt])
+}
+
+// Yksi versioitu luokitteluajo (ajanjakso + laajuus + versio). Toimii
+// tilastona siitä, milloin mitkä maininnat laskettiin — uudelleenlaskettavissa.
+model IdentityFramingAnalysis {
+  id                 String        @id @default(uuid()) @db.Uuid
+  scope              AnalysisScope
+  scopeEntityId      String?       @db.Uuid
+  scopeHash          String        @unique // scope + entity + period + algoritmiversio
+  filters            Json?
+  periodStart        DateTime?     @db.Date
+  periodEnd          DateTime?     @db.Date
+  algorithm          String        @default("identity_framing_v1")
+  algorithmVersion   String        @default("identity_framing_v1")
+  modelVersion       String        @default("lexicon-v1")
+  promptVersion      String        @default("none")
+  articleCount       Int           @default(0)
+  mentionCount       Int           @default(0)
+  sourceSnapshot     String? // hash syötteistä
+  confidence         Float?
+  summary            String?       @db.Text
+  computedAt         DateTime      @default(now())
+  computedFromUpdatedAt DateTime?
+
+  @@index([scopeEntityId])
+  @@index([scope, algorithm])
+}
+
+// Valmiiksi laskettu jakauma (media / toimittaja / korpus / termi / henkilö).
+// Tulokset ovat HAVAINTOJA median sanavalinnoista, ei henkilöiden tietoja.
+enum IdentityAggregateScope {
+  OUTLET
+  JOURNALIST
+  CORPUS
+  TERM
+  PERSON
+}
+
+model IdentityFramingAggregate {
+  id                 String                @id @default(uuid()) @db.Uuid
+  scope              IdentityAggregateScope
+  scopeEntityId      String?               @db.Uuid
+  scopeHash          String                @unique
+  filters            Json?
+  periodStart        DateTime?             @db.Date
+  periodEnd          DateTime?             @db.Date
+  algorithmVersion   String                @default("identity_framing_v1")
+  sampleSize         Int                   @default(0) // henkilötapausten määrä
+  mentionCount       Int                   @default(0)
+  result             Json
+  computedAt         DateTime              @default(now())
+  computedFromUpdatedAt DateTime?
+
+  @@index([scopeEntityId])
+  @@index([scope, algorithmVersion])
+}
+
+// Käänteistapausvertailun tilastollinen ajonäyte. Raportoi vain dataa;
+// pienellä otoksella ei väitetä efektiä (INSUFFICIENT_SAMPLE).
+model IdentityComparison {
+  id                 String     @id @default(uuid()) @db.Uuid
+  direction          String // "inbound_foreign_to_fi" | "outbound_fi_to_foreign"
+  specHash           String     @unique
+  algorithmVersion   String     @default("reverse_case_v1")
+  sampleSizeA        Int        @default(0)
+  sampleSizeB        Int        @default(0)
+  matchedPairs       Int        @default(0)
+  status             String     @default("COMPLETED") // COMPLETED | INSUFFICIENT_SAMPLE | ERROR
+  effectSize         Float?
+  effectSizeType     String? // "cohens_h"
+  confidenceInterval Json? // Wilsonin intervallit osuuksille
+  missingDataRate    Float?
+  matchingQuality    Float? // 0..1 — kuinka monta kohortin tapausta sai parin
+  confounders        Json?
+  result             Json? // koko ajon tulokset
+  computedAt         DateTime   @default(now())
+
+  @@index([direction])
+  @@index([status])
+}
+
 // Media outlet / publisher profile (section 6 & 19). One row per
 // MEDIA_ORGANIZATION entity that is an outlet/publisher. The editorial
 // affiliation is an *institutional* attribute recorded only from a documented
@@ -387,6 +690,7 @@ model Article {
 
   authors  ArticleAuthor[]
   mentions ArticleMention[]
+  identityMentions MediaIdentityMention[]
 
   @@unique([title, publishedAt])
   @@index([publisherEntityId])

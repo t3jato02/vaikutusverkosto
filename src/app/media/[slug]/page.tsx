@@ -16,6 +16,7 @@ import { baseUrl } from "@/lib/site";
 import Avatar from "@/components/Avatar";
 import { ConfidenceBadge } from "@/components/badges";
 import { CoveragePanel } from "@/components/journalism/Coverage";
+import { IdentityFramingSummary } from "@/components/journalism/IdentityFramingSummary";
 import { TrustLegend, TrustChip } from "@/components/journalism/TrustLayer";
 import RelationshipList from "@/components/RelationshipList";
 import { toRelRows, sortRelRows } from "@/lib/relRows";
@@ -180,6 +181,8 @@ export default async function MediaProfilePage({ params }: { params: Promise<{ s
         <CoveragePanel result={coverage} title="Puolueiden käsittely" kind="parties" />
         <CoveragePanel result={coverage} title="Juttutyypit (genre)" kind="genres" />
       </div>
+
+      <IdentityFramingSummary scope="OUTLET" entityId={entity.id} entityName={entity.canonicalName} />
 
       {/* lähteet */}
       <section id="lahteet" aria-label="Lähteet" className="scroll-mt-20">

@@ -13,6 +13,7 @@ import { ConfidenceBadge, VerificationBadge, TemporalBadge } from "@/components/
 import { EvidenceGradeBadge } from "@/components/journalism/EvidenceGradeBadge";
 import { TrustLegend, TrustChip } from "@/components/journalism/TrustLayer";
 import { CoveragePanel } from "@/components/journalism/Coverage";
+import { IdentityFramingSummary } from "@/components/journalism/IdentityFramingSummary";
 import RelationshipList from "@/components/RelationshipList";
 import GraphView from "@/components/GraphView";
 import { db } from "@/lib/db";
@@ -286,6 +287,8 @@ export default async function JournalistPage({ params }: { params: Promise<{ slu
           </div>
         </section>
       )}
+
+      <IdentityFramingSummary scope="JOURNALIST" entityId={entity.id} entityName={entity.canonicalName} />
 
       {/* verkosto */}
       <section aria-label="Verkosto ja organisatoriset yhteydet">

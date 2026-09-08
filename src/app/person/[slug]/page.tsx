@@ -21,6 +21,7 @@ import {
 } from "@/lib/metrics";
 import Avatar from "@/components/Avatar";
 import PoliticianMediaCoverage from "@/components/journalism/PoliticianMediaCoverage";
+import { IdentityBackgroundSection } from "@/components/journalism/IdentityBackgroundSection";
 import { ConfidenceBadge } from "@/components/badges";
 import { sourceTypeLabel } from "@/components/SourceLink";
 import GraphView from "@/components/GraphView";
@@ -190,6 +191,8 @@ export default async function PersonPage({ params }: { params: Promise<{ slug: s
       <EntityNetworkPosition entityId={entity.id} />
 
       <PoliticianMediaCoverage personEntityId={entity.id} />
+
+      <IdentityBackgroundSection personEntityId={entity.id} />
 
       {/* network */}
       <section aria-label="Verkosto">

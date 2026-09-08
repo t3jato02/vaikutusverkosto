@@ -133,13 +133,15 @@ Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git r
 | `npm run e2e` | Playwright release gate (needs `npm run build` + `npm start`) |
 | `npm run ingest:parliament` | Parliament Agent — MPs, parties, committees (real Eduskunta data) |
 | `npm run ingest:seed` | Clearly-marked demo flows (fictional entities) |
+| `npm run ingest:media` | Media & journalism pilot (real RSS/author data) |
+| `npm run ingest:identity` | Identity-framing QA pilot (documented public bio facts + classifier) |
 | `npm run db:up` / `db:down` | Start / stop Docker DB |
 | `npm run db:studio` | Prisma Studio |
 
 ## Routes
 
 `/` · `/search` · `/person/[slug]` · `/organization/[slug]` · `/company/[slug]` ·
-`/institution/[slug]` · `/media` · `/media/[slug]` · `/toimittajat` · `/toimittajat/[slug]` · `/explore` ·
+`/institution/[slug]` · `/media` · `/media/[slug]` · `/media/identity-framing` · `/toimittajat` · `/toimittajat/[slug]` · `/explore` ·
 `/money` · `/decisions` · `/map` · `/changes` · `/compare` · `/investigate` · `/methodology` ·
 `/sources` · `/about` · `/corrections` · `/admin` (+ `/admin/agents`, `/admin/review`) ·
 `/api` (docs) · public API under `/api/*`
@@ -159,6 +161,15 @@ Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git r
   corpus), `ContentAnalysis` (versioned, recomputable coverage), `PoliticalAffiliation` (strict
   A/B/C model, human-review-gated), `PersonalFact` (never-inferred biographic fields with source +
   evidence grade).
+- **Identity framing (Syntymämaa & media-identiteetti)** — a fact layer that keeps separate:
+  `BirthOriginFact` (muuttumaton syntymämaa/-paikka), `CitizenshipFact` (juridinen status, useita sallittu),
+  `ResidenceFact` (asuinmaa/-historia), `SelfIdentificationFact` (henkilön oma julkinen identiteetti,
+  sanatarkka), `MediaIdentityMention` (median käyttämä ilmaus sanatarkasti + konteksti + versioidut
+  luokittelumetatiedot), plus `IdentityFramingAnalysis` / `IdentityFramingAggregate` / `IdentityComparison`
+  (versioidut, uudelleenlaskettavat analyysit ja käänteistapausvertailu). Public UI shows only
+  `PUBLISHED` facts; uncertainty goes to the admin review queue. Järjestelmä ei päättele syntymämaata,
+  syntyperää, etnisyyttä, uskontoa tai kansalaisuutta nimestä, kielestä tai ulkonäöstä — puuttuva tieto on
+  “Ei vahvistettua tietoa”.
 - **AgentRun / AgentFinding / VerificationQueue / ChangeLog / Correction / RightOfReply /
   MethodologyVersion** — operations, verification, change feed, corrections, methodology.
 
