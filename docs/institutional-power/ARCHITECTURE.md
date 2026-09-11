@@ -20,7 +20,7 @@ Read `PARALLEL_WORK_CONTRACT.md` for the collaboration rules.
 | Deployment provider | **Vercel** (`prj_fGWoZtexFb64TZ8F0mP5VFBxZerx`, `team_nq7eYJ1FqTxpgLapbzDKJkGJ`, project `vaikutusverkosto`) |
 | DB technology | PostgreSQL 16 (Docker local `:5434`; pooled Postgres / Supabase in production) |
 | Schema/migrations | Prisma; migrations under `prisma/migrations/` (23 applied in the local dev DB) |
-| Production base | `origin/main` — **`40ab60bc059bf229daadda308daf400eea2b3c56`** (fast-forwarded during the session; `FOUNDATION_READY_SHA` is recorded in `PARALLEL_WORK_CONTRACT.md`) |
+| Production base | `origin/main` — **`67c564e`** at rebase time (Sprint C5 + media & journalism sprint merged; the foundation was rebased onto it) |
 | CICD | `vercel.json`: `prisma migrate deploy` on production builds; cron `0 4 * * *` → `/api/cron/ingest` |
 
 > The Vercel `/api/version` reports `sha: "unknown"` because the live build was deployed

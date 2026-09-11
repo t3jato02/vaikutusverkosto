@@ -8,16 +8,17 @@ expansion. Read `ARCHITECTURE.md` (same directory) for the schema and interfaces
 ## 1. Integration base SHA (branch from here)
 
 ```
-INTEGRATION_BASE_SHA = 91e64934344b88f62f202bfda2ae03bac1e7e456
-FOUNDATION_READY_SHA  = 91e64934344b88f62f202bfda2ae03bac1e7e456
+INTEGRATION_BASE_SHA = 040e6b3fe2b20b4e983b4c37e6b74cd1c5d7b6e0
+FOUNDATION_READY_SHA  = 040e6b3fe2b20b4e983b4c37e6b74cd1c5d7b6e0
 BRANCH                = institutional-power-foundation
 ```
 
 The foundation code (schema, libs, agent interface, tests) is `FOUNDATION_READY_SHA` and
 the integration base for parallel streams is `INTEGRATION_BASE_SHA` — both
-**`91e6493`**, the foundation commit on `institutional-power-foundation` (later commits on
-the branch are documentation-only corrections; branching from `91e6493` is stable and
-complete).
+**`040e6b3`**, the rebased foundation commit on `institutional-power-foundation`
+(rebase: `origin/main` `67c564e`, which already carries Sprint C5 + the media & journalism
+sprint). After the foundation PR merges, streams branch from `INSTITUTIONAL_INTEGRATION_BASE_SHA`
+(the merged `origin/main`), recorded in the integration report.
 
 All parallel streams **must branch from `INTEGRATION_BASE_SHA`** (the foundation commit).
 Do not branch from `sprint-*` branches. The final integrator merges streams into the
