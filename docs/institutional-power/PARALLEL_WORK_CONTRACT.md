@@ -8,15 +8,16 @@ expansion. Read `ARCHITECTURE.md` (same directory) for the schema and interfaces
 ## 1. Integration base SHA (branch from here)
 
 ```
-INTEGRATION_BASE_SHA = 7f349664fdc683c66a74864cea63fbd35cc8eab2
+INTEGRATION_BASE_SHA = 91e64934344b88f62f202bfda2ae03bac1e7e456
 FOUNDATION_READY_SHA  = 91e64934344b88f62f202bfda2ae03bac1e7e456
 BRANCH                = institutional-power-foundation
 ```
 
-The foundation code (schema, libs, agent interface, tests) is `FOUNDATION_READY_SHA`
-`91e6493`. The integration base for parallel streams is the tip of
-`institutional-power-foundation`: `INTEGRATION_BASE_SHA` `7f34966` (this contract with the
-SHAs recorded).
+The foundation code (schema, libs, agent interface, tests) is `FOUNDATION_READY_SHA` and
+the integration base for parallel streams is `INTEGRATION_BASE_SHA` — both
+**`91e6493`**, the foundation commit on `institutional-power-foundation` (later commits on
+the branch are documentation-only corrections; branching from `91e6493` is stable and
+complete).
 
 All parallel streams **must branch from `INTEGRATION_BASE_SHA`** (the foundation commit).
 Do not branch from `sprint-*` branches. The final integrator merges streams into the
