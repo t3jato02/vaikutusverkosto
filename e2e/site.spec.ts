@@ -59,12 +59,12 @@ test.describe("media & journalists", () => {
   test("media hub loads with non-accusatory copy", async ({ page }) => {
     await page.goto("/media");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByText(/Ketkä kirjoittavat vallankäyttäjistä/)).toBeVisible();
+    await expect(page.getByText(/Ketkä kirjoittavat vallankäyttäjistä/i)).toBeVisible();
   });
 
   test("journalist index lists profiles and filters", async ({ page }) => {
     await page.goto("/toimittajat");
-    await expect(page.getByText("TOIMITTAJAT")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /TOIMITTAJAT/ }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: /Mikael Shepelenko/ }).first()).toBeVisible();
   });
 
@@ -77,7 +77,7 @@ test.describe("media & journalists", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Shepelenko");
     await expect(page.getByRole("heading", { name: "Journalistinen tuotanto" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Puolueiden käsittely" }).first()).toBeVisible();
-    await expect(page.getByText(/Sisältöanalyysi ei osoita toimittajan/)).toBeVisible();
+    await expect(page.getByText(/Sisältöanalyysi ei osoita toimittajan/).first()).toBeVisible();
   });
 
   test("media profile shows ownership + journalists", async ({ page }) => {

@@ -46,6 +46,7 @@ export default async function AdminPage() {
           <Link href="/admin/agents" className="btn">Agentit</Link>
           <Link href="/admin/evidence" className="btn">Todisteet</Link>
           <Link href="/admin/review" className="btn">Tarkistusjono</Link>
+          <Link href="/admin/vaikuta" className="btn btn-primary">Vaikuta</Link>
         </nav>
       </header>
 

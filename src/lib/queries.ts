@@ -506,7 +506,8 @@ export function slugifyName(name: string): string {
 export function entityUrlFor(id: string, type: EntityType, name: string, subtype?: string | null): string {
   const slug = `${slugifyName(name)}-${id.slice(0, 8)}`;
   let prefix: string;
-  if (type === "PERSON" && subtype && isJournalistSubtype(subtype)) prefix = "/toimittajat";
+  if (type === "DECISION") prefix = "/decision";
+  else if (type === "PERSON" && subtype && isJournalistSubtype(subtype)) prefix = "/toimittajat";
   else if (type === "PERSON") prefix = "/person";
   else if (type === "COMPANY") prefix = "/company";
   else if (

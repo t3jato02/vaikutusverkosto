@@ -11,6 +11,7 @@ const NAV = [
   { href: "/foreign", label: "Kv-yhteydet" },
   { href: "/analytics", label: "Analyysi" },
   { href: "/decisions", label: "Päätökset" },
+  { href: "/vaikuta", label: "Vaikuta" },
   { href: "/map", label: "Kartta" },
   { href: "/changes", label: "Muutokset" },
   { href: "/sources", label: "Lähteet" },
@@ -69,30 +70,30 @@ export default function HeaderNav({ admin }: { admin: boolean }) {
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <Link
             href="/search"
-            className="hidden items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink-300 transition hover:border-ink-300 hover:text-muted sm:flex"
+            className="hidden items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink-300 transition hover:border-ink-300 hover:text-muted lg:flex"
             aria-label="Hae henkilöä, organisaatiota tai päätöstä"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <circle cx="11" cy="11" r="7" />
               <path d="M21 21l-4.3-4.3" />
             </svg>
-            <span className="hidden md:inline">Hae henkilöä, organisaatiota…</span>
-            <kbd className="hidden rounded border border-line bg-paper px-1 text-[10px] font-medium text-ink-300 md:inline">
+            <span className="hidden xl:inline">Hae henkilöä, organisaatiota…</span>
+            <kbd className="hidden rounded border border-line bg-paper px-1 text-[10px] font-medium text-ink-300 xl:inline">
               ⌘K
             </kbd>
           </Link>
-          <Link href="/search" className="btn-ghost p-1.5 sm:hidden" aria-label="Hae">
+          <Link href="/search" className="btn-ghost p-1.5 lg:hidden" aria-label="Hae">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <circle cx="11" cy="11" r="7" />
               <path d="M21 21l-4.3-4.3" />
             </svg>
           </Link>
           {admin ? (
-            <Link href="/admin" className="hidden text-[13px] font-medium text-muted hover:text-accent sm:inline-block">
+            <Link href="/admin" className="hidden text-[12px] font-medium text-muted hover:text-accent sm:inline-block">
               Ylläpito
             </Link>
           ) : (
-            <Link href="/login" className="hidden text-[13px] text-ink-300 hover:text-ink sm:inline-block">
+            <Link href="/login" className="hidden text-[12px] text-ink-300 hover:text-ink sm:inline-block">
               Kirjaudu
             </Link>
           )}
