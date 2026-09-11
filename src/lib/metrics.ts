@@ -1,4 +1,5 @@
-import type { Confidence, RelationshipType } from "@prisma/client";
+import type { Confidence, RelationshipType, RoleType } from "@prisma/client";
+import { ROLE_TYPE_LABELS } from "@/lib/constants";
 
 // Transparent, explainable analytics (sections 7 and 8).
 // Every metric returns { value, methodology, inputs } so it can be linked
@@ -189,6 +190,250 @@ export function computeTier(input: TierInput): number {
   if (score >= 3) return 3;
   if (score >= 1) return 4;
   return 5;
+}
+
+// ---------------------------------------------------------------- institutional influence (foundation, section 7)
+//
+// An EXPLAINABLE "institutional influence" score (0-100). Structural only: role
+// authority, organisation scale, public-resource control, appointment
+// authority, ownership/control, board centrality and cross-sector reach. It is
+// NOT a political-ideology score, and it never implies wrongdoing. Every point
+// is decomposable into `components` (each with a human-readable basis), so the
+// UI can render exactly:
+//
+//   Institutionaalinen vaikutus 73/100
+//     – Toimitusjohtaja, valtakunnallinen infrastruktuurityönantaja: +24
+//     – Hallituksen puheenjohtaja, merkittävä yritys: +20
+//     – Kaksi lisähallituspaikkaa: +6
+//     – Valtion kriittistä infrastruktuuria hallinnoiva organisaatio: +5
+//
+// When evidence coverage is insufficient the score is NOT shown; the UI must
+// display "Ei riittävästi dataa pisteytykseen." (coverageNote).
+
+export interface InfluenceRole {
+  roleType: RoleType | null;
+  isCurrent: boolean;
+  organizationName?: string | null;
+  organizationSectors?: string[] | null;
+  organizationIsPublic?: boolean | null;
+  organizationEmployeeCount?: number | null;
+  organizationRevenueEur?: number | null;
+}
+
+export interface InfluenceOwnershipStake {
+  percentage: number | null;
+  isIndirect: boolean;
+  calculationStatus?: "REPORTED" | "CALCULATED" | "UNKNOWN" | null;
+}
+
+export interface InfluenceInput {
+  roles: InfluenceRole[];
+  ownershipStakes?: InfluenceOwnershipStake[];
+  /** Positions where this person is the documented appointing body. */
+  appointmentAuthorityCount?: number;
+  /** Number of distinct documented evidence sources behind this person. */
+  evidenceSources: number;
+}
+
+export interface InfluenceComponent {
+  key: string;
+  /** Human decomposition line (fi), e.g. "Toimitusjohtaja, yritys X". */
+  label: string;
+  points: number;
+  /** Why these points were awarded (fi), shown alongside the score. */
+  basis: string;
+}
+
+export interface InfluenceMetricResult {
+  name: "institutional_influence";
+  value: number | null; // null when coverage is insufficient
+  coverageSufficient: boolean;
+  coverageNote: string;
+  methodologyVersion: string;
+  components: InfluenceComponent[];
+  interpretation: string;
+}
+
+// Role authority weights — documented-role based, capped so no single role
+// dominates. Weights are structural, not moral.
+const ROLE_AUTHORITY_POINTS: Partial<Record<RoleType, number>> = {
+  MINISTER: 30,
+  PRESIDENT: 28,
+  CEO: 24,
+  DIRECTOR_GENERAL: 22,
+  BOARD_CHAIR: 20,
+  REGULATOR: 18,
+  MP: 18,
+  SECRETARY_GENERAL: 16,
+  DEPUTY_CEO: 14,
+  UNION_LEADER: 14,
+  CHAIR: 12,
+  BOARD_VICE_CHAIR: 12,
+  POLITICAL_APPOINTEE: 12,
+  ORGANISATION_LEADER: 12,
+  INFRASTRUCTURE_EXECUTIVE: 12,
+  DEFENCE_INDUSTRY_EXECUTIVE: 12,
+  EXECUTIVE: 10,
+  MEDIA_EXECUTIVE: 10,
+  NGO_LEADER: 10,
+  INSTITUTIONAL_INVESTOR_EXECUTIVE: 10,
+  PUBLIC_AGENCY_EXECUTIVE: 10,
+  CIVIL_SERVANT: 8,
+  BANKER: 8,
+  INVESTMENT_BANKER: 8,
+  BOARD_MEMBER: 8,
+  OWNER_REPRESENTATIVE: 8,
+  FOUNDATION_EXECUTIVE: 8,
+  MUNICIPAL_POLITICIAN: 6,
+  ACADEMIC_EXECUTIVE: 8,
+  SUPERVISORY_BOARD: 6,
+  PROFESSOR: 6,
+  INVESTOR: 6,
+  COMMITTEE_MEMBER: 5,
+  SECTOR_COUNCIL: 5,
+  ADVISORY_BOARD: 4,
+  COUNCIL_MEMBER: 4,
+  TRUSTEE: 4,
+  JOURNALIST: 4,
+  LOBBYIST: 4,
+  OTHER: 0,
+};
+
+const BOARD_KEYS = new Set<RoleType | string>([
+  "BOARD_CHAIR",
+  "BOARD_VICE_CHAIR",
+  "BOARD_MEMBER",
+  "SUPERVISORY_BOARD",
+  "ADVISORY_BOARD",
+  "CHAIRS",
+  "TRUSTEE",
+]);
+
+function orgScalePoints(role: InfluenceRole): number {
+  let points = 0;
+  if (role.organizationEmployeeCount !== null && role.organizationEmployeeCount !== undefined) {
+    const n = role.organizationEmployeeCount;
+    points = Math.max(points, n >= 10000 ? 6 : n >= 1000 ? 4 : n >= 100 ? 2 : n >= 10 ? 1 : 0);
+  }
+  if (role.organizationRevenueEur !== null && role.organizationRevenueEur !== undefined) {
+    const r = role.organizationRevenueEur;
+    points = Math.max(points, r >= 1e9 ? 6 : r >= 1e8 ? 4 : r >= 1e7 ? 2 : 0);
+  }
+  return points;
+}
+
+/** Explainable institutional influence, decomposable into components (0-100). */
+export function institutionalInfluence(input: InfluenceInput): InfluenceMetricResult {
+  const currentRoles = input.roles.filter((r) => r.isCurrent);
+  const coverageSufficient = input.evidenceSources >= 1 && currentRoles.length >= 1;
+
+  const components: InfluenceComponent[] = [];
+
+  // 1. Role authority (cap 40).
+  const rolePoints = currentRoles.reduce((s, r) => s + (ROLE_AUTHORITY_POINTS[r.roleType ?? "OTHER"] ?? 0), 0);
+  const roleCapped = Math.min(rolePoints, 40);
+  if (currentRoles.length > 0) {
+    components.push({
+      key: "role_authority",
+      label: "Tehtävävalta (dokumentoidut tehtävät)",
+      points: roleCapped,
+      basis: currentRoles
+        .map((r) => `${ROLE_TYPE_LABELS[r.roleType ?? "OTHER"]?.fi ?? "Tehtävä"}${r.organizationName ? `, ${r.organizationName}` : ""}`)
+        .join("; "),
+    });
+  }
+
+  // 2. Organisation scale (cap 15).
+  const scaleByOrg = new Map<string, number>();
+  for (const r of currentRoles) {
+    const key = r.organizationName ?? r.organizationSectors?.join(",") ?? "unknown";
+    scaleByOrg.set(key, Math.max(scaleByOrg.get(key) ?? 0, orgScalePoints(r)));
+  }
+  const scalePoints = Math.min([...scaleByOrg.values()].reduce((s, p) => s + p, 0), 15);
+  if (scalePoints > 0) {
+    components.push({
+      key: "organisation_scale",
+      label: "Organisaation koko",
+      points: scalePoints,
+      basis: "Henkilöstömäärä ja/tai liikevaihto (dokumentoitu).",
+    });
+  }
+
+  // 3. Public-resource control (cap 15).
+  const publicRoles = currentRoles.filter((r) => r.organizationIsPublic === true);
+  const publicPoints = Math.min(publicRoles.length * 5, 15);
+  if (publicRoles.length > 0) {
+    components.push({
+      key: "public_resource_control",
+      label: "Julkisen organisaation johto/ohjaus",
+      points: publicPoints,
+      basis: `${publicRoles.length} julkisen tai valtion omistaman organisaation dokumentoitu tehtävä.`,
+    });
+  }
+
+  // 4. Appointment authority (cap 12).
+  const apptCount = input.appointmentAuthorityCount ?? 0;
+  const apptPoints = Math.min(apptCount * 4, 12);
+  if (apptCount > 0) {
+    components.push({
+      key: "appointment_authority",
+      label: "Nimitysvalta",
+      points: apptPoints,
+      basis: `${apptCount} dokumentoitu nimitys/käytettävissä oleva nimitysrooli.`,
+    });
+  }
+
+  // 5. Ownership / control (cap 10) — only REPORTED or CALCULATED direct stakes.
+  const ownedPercent = (input.ownershipStakes ?? [])
+    .filter((s) => !s.isIndirect && (s.calculationStatus === "REPORTED" || s.calculationStatus === "CALCULATED"))
+    .reduce((sum, s) => sum + Math.min(Math.max(s.percentage ?? 0, 0), 100) / 100, 0);
+  const ownershipPoints = Math.min(Math.round(ownedPercent * 10), 10);
+  if (ownedPercent > 0) {
+    components.push({
+      key: "ownership_control",
+      label: "Omistus/omistusohjaus",
+      points: ownershipPoints,
+      basis: "Dokumentoitujen suorien omistusosuuksien osuus (vain lähteen ilmoittama tai laskennallinen).",
+    });
+  }
+
+  // 6. Board centrality (cap 12).
+  const boardCount = currentRoles.filter((r) => BOARD_KEYS.has(r.roleType ?? "")).length;
+  const boardPoints = Math.min(boardCount * 3, 12);
+  if (boardCount > 0) {
+    components.push({
+      key: "board_centrality",
+      label: "Hallituspaikat",
+      points: boardPoints,
+      basis: `${boardCount} samanaikaista dokumentoitua hallitus-/luottamustehtävää.`,
+    });
+  }
+
+  // 7. Cross-sector reach (cap 10).
+  const sectors = new Set<string>();
+  for (const r of currentRoles) for (const s of r.organizationSectors ?? []) sectors.add(s);
+  const sectorPoints = Math.min(sectors.size * 2, 10);
+  if (sectors.size > 0) {
+    components.push({
+      key: "cross_sector_reach",
+      label: "Toimialojen kattavuus",
+      points: sectorPoints,
+      basis: `${sectors.size} dokumentoitua toimialaa nykyisissä tehtävissä.`,
+    });
+  }
+
+  const total = Math.min(components.reduce((s, c) => s + c.points, 0), 100);
+
+  return {
+    name: "institutional_influence",
+    value: coverageSufficient ? total : null,
+    coverageSufficient,
+    coverageNote: coverageSufficient ? "" : "Ei riittävästi dataa pisteytykseen.",
+    methodologyVersion: "1.0",
+    components,
+    interpretation:
+      "Rakenteellinen, lähdepohjainen mittari (0–100): tehtävävalta, organisaation koko, julkisten resurssien ohjaus, nimitysvalta, omistus/omistusohjaus, hallituspaikat ja toimialojen kattavuus. Ei arvostelma vallan käytöstä eikä poliittinen kannanotto.",
+  };
 }
 
 // ---------------------------------------------------------------- helpers

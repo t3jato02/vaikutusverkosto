@@ -6,7 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { MAX_RUN_MINUTES, type RunContext, type RunReport, type SourceAdapter } from "./types";
 import { TransientError, sleep } from "./http";
-import { ensureSource, markSourceFailure, markSourceSuccess, publishVerifiedFact } from "./publish";
+import { ensureSource, markSourceFailure, markSourceSuccess, publishVerifiedFact, publishRoleAssignment, publishOrganizationSector, publishCriticalFunction, publishProcurement, publishLobbying } from "./publish";
 import { ensureRegistrySource, isSourceEnabled, recordRegistryCheck } from "./sourceRegistry";
 import { collect, markDocumentProcessed } from "@/lib/ingestion/collector";
 import type { DocumentDescriptor } from "@/lib/ingestion/types";
@@ -188,6 +188,33 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
         const facts = await adapter.parse(ctx, doc, cd.payload!.json);
         stats.proposed += facts.length;
         for (const fact of facts) {
+          // Institutional-power fact kinds (foundation) route to their own
+          // publication services; every other fact is a relationship/flow.
+          if (fact.kind === "role") {
+            const res = await publishRoleAssignment(ctx, fact);
+            if (res.action === "rejected") ctx.log(`rejected role: ${res.reason}`);
+            continue;
+          }
+          if (fact.kind === "sector") {
+            const res = await publishOrganizationSector(ctx, fact);
+            if (res.action === "rejected") ctx.log(`rejected sector: ${res.reason}`);
+            continue;
+          }
+          if (fact.kind === "critical-function") {
+            const res = await publishCriticalFunction(ctx, fact);
+            if (res.action === "rejected") ctx.log(`rejected critical-function: ${res.reason}`);
+            continue;
+          }
+          if (fact.kind === "procurement") {
+            const res = await publishProcurement(ctx, fact);
+            if (res.action === "rejected") ctx.log(`rejected procurement: ${res.reason}`);
+            continue;
+          }
+          if (fact.kind === "lobbying") {
+            const res = await publishLobbying(ctx, fact);
+            if (res.action === "rejected") ctx.log(`rejected lobbying: ${res.reason}`);
+            continue;
+          }
           const proposed = {
             kind: fact.kind,
             source: fact.source,

@@ -1,4 +1,4 @@
-import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, RoleType, Sector, CriticalFunction, ProcurementProcedure } from "@prisma/client";
 
 /** Optional project a financial flow funds (Sprint C2). */
 export interface ProjectRef {
@@ -103,6 +103,133 @@ export interface ProposedFact {
   ownershipPercent?: number;
 }
 
+// ---------------------------------------------------------------- institutional power facts (foundation)
+//
+// First-class, source-backed facts the ingestion pipeline can propose for the
+// institutional-power expansion. Every fact requires an evidence URL and
+// resolves entities through the shared entity-resolution interface.
+
+/** A person's documented role in an organisation (a RoleAssignment). */
+export interface RoleAssignmentFact {
+  kind: "role";
+  person: EntityRef;
+  organization?: EntityRef | null;
+  /** Free-text role title as documented by the source. */
+  role: string;
+  roleType?: RoleType | null;
+  department?: string | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  /** Canonical values: NOMINATION | ELECTION | APPOINTMENT | OWNER_DECISION | SECONDMENT | OTHER */
+  appointmentMethod?: string | null;
+  appointedBy?: EntityRef | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+  /** Source explicitly asserts a present-day active role. */
+  assertedCurrent?: boolean;
+}
+
+/** A neutral sector classification for an organisation (multiple allowed). */
+export interface OrganizationSectorFact {
+  kind: "sector";
+  organization: EntityRef;
+  sector: Sector;
+  validFrom?: Date | null;
+  validTo?: Date | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** A critical-function classification, only with a public evidence basis. */
+export interface CriticalFunctionFact {
+  kind: "critical-function";
+  organization: EntityRef;
+  function: CriticalFunction;
+  /** Who classified (adapter id or "human"). */
+  classificationSource: string;
+  /** The public evidence basis for the label. */
+  publicBasis: string;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** A documented public-procurement relationship (authority → supplier). */
+export interface ProcurementFact {
+  kind: "procurement";
+  contractingAuthority: EntityRef;
+  supplier: EntityRef;
+  value?: number | null;
+  currency?: string;
+  cpv?: string | null;
+  procedure?: ProcurementProcedure | null;
+  publicationUrl?: string | null;
+  awardDate?: Date | null;
+  noticeId?: string | null;
+  description?: string | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** A documented lobbying engagement (organisation → target). */
+export interface LobbyingFact {
+  kind: "lobbying";
+  organization: EntityRef;
+  target: EntityRef;
+  subject?: string | null;
+  communicationMethod?: string | null;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+  reportedFinancialResources?: number | null;
+  currency?: string | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** Every fact kind an adapter may propose. */
+export type AgentFact =
+  | NormalizedFact
+  | RoleAssignmentFact
+  | OrganizationSectorFact
+  | CriticalFunctionFact
+  | ProcurementFact
+  | LobbyingFact;
+
 /** Reference to an entity that must be resolved (never merged on name alone). */
 export interface EntityRef {
   type: EntityType;
@@ -185,9 +312,9 @@ export interface SourceAdapter {
   /** Fetch raw content for a document. */
   fetch(ctx: RunContext, doc: SourceDocument): Promise<unknown>;
   /** Parse raw content into normalized facts. */
-  parse(ctx: RunContext, doc: SourceDocument, raw: unknown): Promise<NormalizedFact[]>;
+  parse(ctx: RunContext, doc: SourceDocument, raw: unknown): Promise<AgentFact[]>;
   /** Optional hook after a fact is successfully published (e.g. profile metadata). */
-  onFactPublished?(ctx: RunContext, fact: NormalizedFact, entityIds: { source: string | null; target: string | null }): Promise<void>;
+  onFactPublished?(ctx: RunContext, fact: AgentFact, entityIds: { source: string | null; target: string | null }): Promise<void>;
 }
 
 export const MAX_RUN_MINUTES = 20;

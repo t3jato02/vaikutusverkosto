@@ -1,4 +1,4 @@
-import { EntityType, RelationshipType, FlowType, Confidence, ChangeEventType, FundingType } from "@prisma/client";
+import { EntityType, RelationshipType, FlowType, Confidence, ChangeEventType, FundingType, RoleType, Sector, CriticalFunction, ProcurementProcedure, OwnershipCalculationStatus } from "@prisma/client";
 
 type Label = { fi: string; en: string; sv?: string };
 
@@ -154,6 +154,153 @@ export const CONFIDENCE_LABELS: Record<Confidence, Label> = {
   LOW: { fi: "Matala", en: "Low" },
   DISPUTED: { fi: "Riitautettu", en: "Disputed" },
 };
+
+// ---------------------------------------------------------------- institutional power (foundation)
+
+export const ROLE_TYPE_LABELS: Record<RoleType, Label> = {
+  MP: { fi: "Kansanedustaja", en: "Member of Parliament" },
+  MINISTER: { fi: "Ministeri", en: "Minister" },
+  MUNICIPAL_POLITICIAN: { fi: "Kuntapoliitikko", en: "Municipal politician" },
+  CIVIL_SERVANT: { fi: "Virkamies", en: "Civil servant" },
+  CEO: { fi: "Toimitusjohtaja", en: "CEO" },
+  DEPUTY_CEO: { fi: "Varatoimitusjohtaja", en: "Deputy CEO" },
+  EXECUTIVE: { fi: "Johtaja", en: "Executive" },
+  BOARD_CHAIR: { fi: "Hallituksen puheenjohtaja", en: "Board chair" },
+  BOARD_VICE_CHAIR: { fi: "Hallituksen varapuheenjohtaja", en: "Board vice chair" },
+  BOARD_MEMBER: { fi: "Hallituksen jäsen", en: "Board member" },
+  SUPERVISORY_BOARD: { fi: "Hallintoneuvoston jäsen", en: "Supervisory board member" },
+  ADVISORY_BOARD: { fi: "Neuvottelukunnan jäsen", en: "Advisory board member" },
+  COUNCIL_MEMBER: { fi: "Valtuuston jäsen", en: "Council member" },
+  DIRECTOR_GENERAL: { fi: "Pääjohtaja", en: "Director General" },
+  SECRETARY_GENERAL: { fi: "Pääsihteeri", en: "Secretary General" },
+  CHAIR: { fi: "Puheenjohtaja", en: "Chair" },
+  PRESIDENT: { fi: "Presidentti", en: "President" },
+  TRUSTEE: { fi: "Luottamushenkilö", en: "Trustee" },
+  REGULATOR: { fi: "Sääntelijä", en: "Regulator" },
+  POLITICAL_APPOINTEE: { fi: "Poliittinen virkanimitys", en: "Political appointee" },
+  OWNER_REPRESENTATIVE: { fi: "Omistajan edustaja", en: "Owner representative" },
+  COMMITTEE_MEMBER: { fi: "Valiokunnan jäsen", en: "Committee member" },
+  SECTOR_COUNCIL: { fi: "Toimialaneuvosto", en: "Sector council member" },
+  ORGANISATION_LEADER: { fi: "Järjestön johtaja", en: "Organisation leader" },
+  UNION_LEADER: { fi: "Ammattiliiton johtaja", en: "Union leader" },
+  NGO_LEADER: { fi: "Järjestöjohtaja", en: "NGO leader" },
+  FOUNDATION_EXECUTIVE: { fi: "Säätiön johtaja", en: "Foundation executive" },
+  JOURNALIST: { fi: "Toimittaja", en: "Journalist" },
+  MEDIA_EXECUTIVE: { fi: "Mediajohtaja", en: "Media executive" },
+  ACADEMIC_EXECUTIVE: { fi: "Tiedejohtaja", en: "Academic executive" },
+  PROFESSOR: { fi: "Professori", en: "Professor" },
+  INVESTOR: { fi: "Sijoittaja", en: "Investor" },
+  BANKER: { fi: "Pankkiiri", en: "Banker" },
+  INVESTMENT_BANKER: { fi: "Investointipankkiiri", en: "Investment banker" },
+  INSTITUTIONAL_INVESTOR_EXECUTIVE: { fi: "Instituutiosijoittajan johtaja", en: "Institutional investor executive" },
+  PUBLIC_AGENCY_EXECUTIVE: { fi: "Viranomaisjohtaja", en: "Public agency executive" },
+  INFRASTRUCTURE_EXECUTIVE: { fi: "Infrastruktuurijohtaja", en: "Infrastructure executive" },
+  DEFENCE_INDUSTRY_EXECUTIVE: { fi: "Puolustusteollisuuden johtaja", en: "Defence industry executive" },
+  LOBBYIST: { fi: "Edunvalvoja", en: "Lobbyist" },
+  OTHER: { fi: "Muu tehtävä", en: "Other role" },
+};
+
+export const SECTOR_LABELS: Record<Sector, Label> = {
+  ENERGY: { fi: "Energia", en: "Energy" },
+  ELECTRICITY_TRANSMISSION: { fi: "Sähkönsiirto", en: "Electricity transmission" },
+  ELECTRICITY_DISTRIBUTION: { fi: "Sähkönjakelu", en: "Electricity distribution" },
+  DISTRICT_HEATING: { fi: "Kaukolämpö", en: "District heating" },
+  GAS: { fi: "Kaasu", en: "Gas" },
+  WATER: { fi: "Vesi", en: "Water" },
+  WASTE: { fi: "Jätehuolto", en: "Waste" },
+  FOOD: { fi: "Elintarvikkeet", en: "Food" },
+  AGRICULTURE: { fi: "Maatalous", en: "Agriculture" },
+  FOOD_LOGISTICS: { fi: "Elintarvikelogistiikka", en: "Food logistics" },
+  BANKING: { fi: "Pankkitoiminta", en: "Banking" },
+  INVESTMENT: { fi: "Sijoittaminen", en: "Investment" },
+  INSURANCE: { fi: "Vakuutus", en: "Insurance" },
+  PENSION: { fi: "Eläke", en: "Pension" },
+  PAYMENTS: { fi: "Maksuliikenne", en: "Payments" },
+  TRANSPORT: { fi: "Liikenne", en: "Transport" },
+  RAIL: { fi: "Rautatiet", en: "Rail" },
+  AVIATION: { fi: "Ilmailu", en: "Aviation" },
+  ROAD_TRANSPORT: { fi: "Tieliikenne", en: "Road transport" },
+  PUBLIC_TRANSIT: { fi: "Joukkoliikenne", en: "Public transit" },
+  PORT: { fi: "Satama", en: "Port" },
+  MARITIME: { fi: "Meriliikenne", en: "Maritime" },
+  LOGISTICS: { fi: "Logistiikka", en: "Logistics" },
+  TELECOM: { fi: "Televiestintä", en: "Telecom" },
+  DATA_NETWORK: { fi: "Datuverkot", en: "Data networks" },
+  CLOUD: { fi: "Pilvipalvelut", en: "Cloud" },
+  CYBERSECURITY: { fi: "Kyberturvallisuus", en: "Cybersecurity" },
+  TECHNOLOGY: { fi: "Teknologia", en: "Technology" },
+  PUBLIC_IT: { fi: "Julkinen tietohallinto", en: "Public IT" },
+  HEALTHCARE: { fi: "Terveydenhuolto", en: "Healthcare" },
+  PHARMA: { fi: "Lääketeollisuus", en: "Pharma" },
+  SOCIAL_SECURITY: { fi: "Sosiaaliturva", en: "Social security" },
+  EMERGENCY_SUPPLY: { fi: "Huoltovarmuus", en: "Emergency supply" },
+  AID_ORGANISATION: { fi: "Apu- ja kehitysjärjestö", en: "Aid organisation" },
+  NGO: { fi: "Järjestö", en: "NGO" },
+  FOUNDATION: { fi: "Säätiö", en: "Foundation" },
+  EMPLOYER_ORGANISATION: { fi: "Työnantajajärjestö", en: "Employer organisation" },
+  LABOUR_ORGANISATION: { fi: "Työmarkkinajärjestö", en: "Labour organisation" },
+  MEDIA: { fi: "Media", en: "Media" },
+  EDUCATION: { fi: "Koulutus", en: "Education" },
+  RESEARCH: { fi: "Tutkimus", en: "Research" },
+  DEFENCE: { fi: "Puolustus", en: "Defence" },
+  SECURITY: { fi: "Turvallisuus", en: "Security" },
+  STATE_OWNED: { fi: "Valtion omistama", en: "State-owned" },
+  MUNICIPAL_OWNED: { fi: "Kunnan omistama", en: "Municipal-owned" },
+  PUBLIC_AGENCY: { fi: "Julkinen viranomainen", en: "Public agency" },
+  SPECIAL_ASSIGNMENT: { fi: "Erityistehtäväyhtiö", en: "Special-assignment company" },
+  ALCOHOL_MONOPOLY: { fi: "Alkoholimonopoli", en: "Alcohol monopoly" },
+  GAMBLING: { fi: "Rahapelit", en: "Gambling" },
+  OTHER: { fi: "Muu toimiala", en: "Other sector" },
+};
+
+export const CRITICAL_FUNCTION_LABELS: Record<CriticalFunction, Label> = {
+  NATIONAL_GRID: { fi: "Valtakunnan kantaverkko", en: "National grid" },
+  LOCAL_GRID: { fi: "Paikallinen sähköverkko", en: "Local grid" },
+  GAS_TRANSMISSION: { fi: "Kaasun siirtoverkko", en: "Gas transmission" },
+  TELECOMMUNICATIONS: { fi: "Televiestintä", en: "Telecommunications" },
+  PAYMENT_INFRASTRUCTURE: { fi: "Maksuinfrastruktuuri", en: "Payment infrastructure" },
+  FOOD_DISTRIBUTION: { fi: "Elintarvikejakelu", en: "Food distribution" },
+  RAIL_NETWORK: { fi: "Rautatieverkko", en: "Rail network" },
+  AVIATION: { fi: "Ilmailu", en: "Aviation" },
+  PORT_LOGISTICS: { fi: "Satamalogistiikka", en: "Port logistics" },
+  WATER: { fi: "Vesihuolto", en: "Water" },
+  HEALTHCARE_SUPPLY: { fi: "Terveydenhuollon huoltovarmuus", en: "Healthcare supply" },
+  DEFENCE_SUPPLY: { fi: "Puolustushuolto", en: "Defence supply" },
+  GOVERNMENT_IT: { fi: "Valtion tietohallinto", en: "Government IT" },
+};
+
+export const PROCUREMENT_PROCEDURE_LABELS: Record<ProcurementProcedure, Label> = {
+  OPEN: { fi: "Avoin menettely", en: "Open procedure" },
+  RESTRICTED: { fi: "Rajoitettu menettely", en: "Restricted procedure" },
+  NEGOTIATED: { fi: "Neuvottelumenettely", en: "Negotiated procedure" },
+  COMPETITIVE_DIALOGUE: { fi: "Kilpailullinen neuvottelumenettely", en: "Competitive dialogue" },
+  INNOVATION_PARTNERSHIP: { fi: "Innovaatiokumppanuus", en: "Innovation partnership" },
+  DIRECT_AWARD: { fi: "Suorahankinta", en: "Direct award" },
+  FRAMEWORK_AGREEMENT: { fi: "Puitesopimus", en: "Framework agreement" },
+  OTHER: { fi: "Muu menettely", en: "Other procedure" },
+};
+
+export const OWNERSHIP_CALCULATION_STATUS_LABELS: Record<OwnershipCalculationStatus, Label> = {
+  REPORTED: { fi: "Lähteen ilmoittama", en: "Reported by source" },
+  CALCULATED: { fi: "Laskennallinen", en: "Calculated" },
+  UNKNOWN: { fi: "Tarkkuus ei tiedossa", en: "Precision unknown" },
+};
+
+export function roleTypeLabel(type: RoleType | string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  return ROLE_TYPE_LABELS[type as RoleType]?.[lang] ?? String(type ?? "").toLowerCase();
+}
+
+export function sectorLabel(type: Sector | string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  return SECTOR_LABELS[type as Sector]?.[lang] ?? String(type ?? "").toLowerCase();
+}
+
+export function criticalFunctionLabel(type: CriticalFunction | string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  return CRITICAL_FUNCTION_LABELS[type as CriticalFunction]?.[lang] ?? String(type ?? "").toLowerCase();
+}
+
+export function procurementProcedureLabel(type: ProcurementProcedure | string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  return PROCUREMENT_PROCEDURE_LABELS[type as ProcurementProcedure]?.[lang] ?? String(type ?? "").toLowerCase();
+}
 
 export const CHANGE_EVENT_LABELS: Record<ChangeEventType, Label> = {
   RELATIONSHIP_ADDED: { fi: "Uusi yhteys", en: "New relationship" },
