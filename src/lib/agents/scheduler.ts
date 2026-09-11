@@ -71,6 +71,12 @@ export function runOptionsFor(sourceId: string): { concurrency: number; maxDocsP
     case "eu-fts-agent":
       // Records are pre-gathered in discovery; publishing is the cost.
       return { concurrency: 3, maxDocsPerTick: 200 };
+    case "yle-agent":
+      return { concurrency: 2, maxDocsPerTick: 6 };
+    case "award-agent":
+      return { concurrency: 2, maxDocsPerTick: 6 };
+    case "gift-benefit-agent":
+      return { concurrency: 1, maxDocsPerTick: 4 };
     default:
       return { concurrency: 2, maxDocsPerTick: 2 };
   }

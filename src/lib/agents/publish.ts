@@ -5,7 +5,7 @@
 // by design; adapters must route writes through this module.
 
 import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, Confidence, EntityStatus } from "@prisma/client";
-import type { RunContext, ProposedFact } from "./types";
+import type { RunContext, ProposedFact, BenefitEventFact, StatementItemFact, EntityRef } from "./types";
 import { resolveEntity } from "./entityResolution";
 import { confidenceToScore, deriveAgentStatus } from "@/lib/verification";
 import { deriveTemporalState } from "@/lib/temporal";
@@ -32,10 +32,12 @@ const FUNDING_TYPE_BY_FLOW: Partial<Record<FlowType, FundingType>> = {
   ASSOCIATION_FUNDING: "GRANT",
   PUBLIC_PROJECT_FUNDING: "GRANT",
   PROCUREMENT: "PROCUREMENT",
+  CONTENT_PROCUREMENT: "PROCUREMENT",
   CONSULTING_PAYMENT: "PROCUREMENT",
   INVESTMENT: "INVESTMENT",
   OWNERSHIP: "INVESTMENT",
   SPONSORSHIP: "SPONSORSHIP",
+  RIGHTS_PAYMENT: "OTHER",
 };
 function mapFundingType(t: FlowType): FundingType {
   return FUNDING_TYPE_BY_FLOW[t] ?? "OTHER";
@@ -508,6 +510,259 @@ async function upsertFlow(
       sourceId: o.sourceId,
       description: `Uusi rahavirta: ${o.flowType} ${o.amount} ${o.currency}`,
       occurredAt: new Date(),
+    },
+  });
+  ctx.stats.created++;
+  return "created";
+}
+
+// ---------------------------------------------------------------------------
+// Benefit events (gifts / awards / honours / portraits / hospitality) — section 6
+// ---------------------------------------------------------------------------
+//
+// Publication policy (section 18):
+//   - An EXACT value from an official/audited source, extracted deterministically
+//     → auto-published (PUBLISHED).
+//   - Everything else (estimated/reported/calculated values, weaker sources,
+//     LLM/manual extraction) → PENDING_REVIEW and shown to an admin in the
+//     benefits review queue. No AI model may turn speculation into a published
+//     benefit (section 30).
+
+export interface BenefitPublicationResult {
+  action: "created" | "updated" | "unchanged" | "rejected" | "review";
+  reason?: string;
+  entityIds: { recipient: string | null; giver: string | null };
+}
+
+const OFFICIAL_BENEFIT_SOURCE_TYPES = new Set<SourceType>([
+  "OFFICIAL_PRIMARY",
+  "OFFICIAL_REGISTER",
+  "PARLIAMENTARY_RECORD",
+  "COURT_DOCUMENT",
+  "COMPANY_DISCLOSURE",
+  "PROCUREMENT_RECORD",
+  "ORGANIZATION_DISCLOSURE",
+  "ANNUAL_REPORT",
+]);
+
+async function resolveBenefitParty(
+  db: PrismaClient,
+  ref: EntityRef | null | undefined,
+): Promise<{ id: string | null; blocker?: string }> {
+  if (!ref) return { id: null };
+  const outcome = await resolveEntity(db, ref);
+  if (outcome.status === "matched") return { id: outcome.entityId };
+  if (outcome.status === "unresolved") return { id: null, blocker: `unresolved entity (candidate ${outcome.candidateId})` };
+  return { id: null, blocker: outcome.reason };
+}
+
+export async function publishBenefitEvent(
+  ctx: RunContext,
+  fact: BenefitEventFact,
+): Promise<BenefitPublicationResult> {
+  const reject = (reason: string): BenefitPublicationResult => {
+    ctx.stats.rejected++;
+    return { action: "rejected", reason, entityIds: { recipient: null, giver: null } };
+  };
+
+  if (!fact.title || !fact.title.trim()) return reject("benefit without title");
+  if (!fact.evidenceUrl) return reject("benefit without evidence URL");
+  const hasParty = Boolean(fact.giver || fact.recipient || fact.payer || fact.beneficiary || fact.subject || fact.artist);
+  if (!hasParty) return reject("benefit without any documented party");
+  if (fact.monetaryValue !== null && fact.monetaryValue !== undefined) {
+    if (!Number.isFinite(fact.monetaryValue) || Math.abs(fact.monetaryValue) > MAX_AMOUNT)
+      return reject("benefit value out of bounds");
+    if (!fact.currency) return reject("benefit value without currency");
+  }
+  if (fact.confidence === "LOW") return reject("LOW confidence not published by default");
+
+  const parties = await Promise.all(
+    ([
+      ["giver", fact.giver],
+      ["recipient", fact.recipient],
+      ["payer", fact.payer],
+      ["beneficiary", fact.beneficiary],
+      ["subject", fact.subject],
+      ["artist", fact.artist],
+    ] as [string, EntityRef | null | undefined][]).map(async ([label, ref]) => ({
+      label,
+      ...(await resolveBenefitParty(ctx.db, ref)),
+    })),
+  );
+  const partyIds: Record<string, string | null> = {};
+  for (const p of parties) {
+    if (p.blocker) return reject(`${p.label} ${p.blocker}`);
+    partyIds[p.label] = p.id;
+  }
+  const giver = partyIds.giver;
+  const recipient = partyIds.recipient;
+  const payer = partyIds.payer;
+  const beneficiary = partyIds.beneficiary;
+  const subject = partyIds.subject;
+  const artist = partyIds.artist;
+
+  const evidenceSource = await ensureSource(ctx.db, {
+    url: fact.evidenceUrl,
+    name: fact.sourceName,
+    publisher: fact.publisher,
+    sourceType: fact.sourceType,
+    documentTitle: fact.evidenceTitle ?? null,
+  });
+
+  // Auto-publish policy (section 18).
+  const method = fact.extractionMethod ?? "deterministic-parser";
+  const officialSource = OFFICIAL_BENEFIT_SOURCE_TYPES.has(fact.sourceType);
+  const exactValue = fact.valueType === "EXACT" || fact.monetaryValue === null || fact.monetaryValue === undefined;
+  const autoPublish = method === "deterministic-parser" && officialSource && exactValue;
+
+  const existing = fact.dedupeKey
+    ? await ctx.db.benefitEvent.findUnique({ where: { dedupeKey: fact.dedupeKey } })
+    : null;
+  if (existing) {
+    await ctx.db.benefitEvent.update({
+      where: { id: existing.id },
+      data: { lastVerifiedAt: new Date() },
+    });
+    ctx.stats.updated++;
+    return { action: "unchanged", entityIds: { recipient, giver } };
+  }
+
+  const reviewStatus = autoPublish ? "PUBLISHED" : "PENDING_REVIEW";
+  const verificationStatus = autoPublish
+    ? deriveAgentStatus({ sourceType: fact.sourceType, confidence: fact.confidence })
+    : "AUTO_DETECTED";
+  await ctx.db.benefitEvent.create({
+    data: {
+      eventType: fact.eventType,
+      title: fact.title.trim(),
+      description: fact.description ?? null,
+      recipientEntityId: recipient,
+      giverEntityId: giver,
+      payerEntityId: payer,
+      beneficiaryEntityId: beneficiary,
+      subjectEntityId: subject,
+      artistEntityId: artist,
+      eventDate: fact.eventDate ?? null,
+      startDate: fact.startDate ?? null,
+      endDate: fact.endDate ?? null,
+      monetaryValue: fact.monetaryValue ?? null,
+      currency: fact.currency ?? null,
+      valueType: fact.valueType,
+      publicFundsUsed: fact.publicFundsUsed ?? null,
+      country: fact.country ?? null,
+      selectionRole: fact.selectionRole ?? null,
+      verificationStatus,
+      confidence: fact.confidence,
+      confidenceScore: confidenceToScore(fact.confidence),
+      reviewStatus,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      sourceId: evidenceSource.id,
+      dedupeKey: fact.dedupeKey ?? null,
+      createdBy: ctx.agentId,
+      lastVerifiedAt: new Date(),
+    },
+  });
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created", entityIds: { recipient, giver } };
+  }
+  ctx.stats.candidates++;
+  return { action: "review", entityIds: { recipient, giver } };
+}
+
+// ---------------------------------------------------------------------------
+// Financial statement line items (section 3 & 43)
+// ---------------------------------------------------------------------------
+
+export type StatementPublicationResult = "created" | "updated" | "unchanged" | "rejected";
+
+export async function publishStatementItem(
+  ctx: RunContext,
+  fact: StatementItemFact,
+): Promise<StatementPublicationResult> {
+  const reject = (reason: string): StatementPublicationResult => {
+    void reason;
+    ctx.stats.rejected++;
+    return "rejected";
+  };
+  if (!fact.entity?.name) return reject("statement without entity");
+  if (!fact.fiscalYear || fact.fiscalYear < 1900 || fact.fiscalYear > 2100) return reject("statement year out of bounds");
+  if (!Number.isFinite(fact.amount) || Math.abs(fact.amount) > MAX_AMOUNT) return reject("statement amount out of bounds");
+  if (!fact.currency) return reject("statement without currency");
+  if (!fact.category || !fact.categoryLabel) return reject("statement without category");
+  if (!fact.reportUrl) return reject("statement without report URL");
+
+  const ent = await resolveEntity(ctx.db, fact.entity);
+  if (ent.status === "unresolved") return reject(`unresolved entity (candidate ${ent.candidateId})`);
+  if (ent.status === "rejected") return reject(ent.reason);
+
+  const evidenceSource = await ensureSource(ctx.db, {
+    url: fact.reportUrl,
+    name: fact.sourceName,
+    publisher: fact.publisher,
+    sourceType: fact.sourceType,
+    documentTitle: fact.evidenceTitle ?? null,
+  });
+
+  const existing = fact.dedupeKey
+    ? await ctx.db.financialStatementItem.findUnique({ where: { dedupeKey: fact.dedupeKey } })
+    : await ctx.db.financialStatementItem.findFirst({
+        where: {
+          entityId: ent.entityId,
+          fiscalYear: fact.fiscalYear,
+          kind: fact.statementKind,
+          category: fact.category,
+          reportUrl: fact.reportUrl,
+        },
+      });
+
+  if (existing) {
+    const changed =
+      Number(existing.amount) !== fact.amount ||
+      existing.categoryLabel !== fact.categoryLabel ||
+      existing.valueType !== fact.valueType ||
+      existing.isTotal !== Boolean(fact.isTotal) ||
+      (existing.note ?? null) !== (fact.note ?? null);
+    if (changed) {
+      await ctx.db.financialStatementItem.update({
+        where: { id: existing.id },
+        data: {
+          amount: fact.amount,
+          categoryLabel: fact.categoryLabel,
+          valueType: fact.valueType,
+          isTotal: Boolean(fact.isTotal),
+          note: fact.note ?? null,
+          lastVerifiedAt: new Date(),
+        },
+      });
+      ctx.stats.updated++;
+      return "updated";
+    }
+    await ctx.db.financialStatementItem.update({
+      where: { id: existing.id },
+      data: { lastVerifiedAt: new Date() },
+    });
+    ctx.stats.updated++;
+    return "unchanged";
+  }
+
+  await ctx.db.financialStatementItem.create({
+    data: {
+      entityId: ent.entityId,
+      fiscalYear: fact.fiscalYear,
+      kind: fact.statementKind,
+      category: fact.category,
+      categoryLabel: fact.categoryLabel,
+      amount: fact.amount,
+      currency: fact.currency,
+      valueType: fact.valueType,
+      isTotal: Boolean(fact.isTotal),
+      note: fact.note ?? null,
+      reportUrl: fact.reportUrl,
+      sourceId: evidenceSource.id,
+      dedupeKey: fact.dedupeKey ?? null,
+      createdBy: ctx.agentId,
+      lastVerifiedAt: new Date(),
     },
   });
   ctx.stats.created++;

@@ -2,27 +2,11 @@
 // Adapters never fetch user-controlled URLs — but this stays defensive anyway.
 
 import type { CollectedPayload } from "./types";
+import { assertPublicHttpUrl } from "@/lib/ssrf";
 
 export class TransientHttpError extends Error {}
 
-const BLOCKED_HOST_RE =
-  /^(localhost$|127\.|0\.0\.0\.0$|10\.|192\.168\.|169\.254\.|::1$|\[::1\]$|172\.(1[6-9]|2\d|3[01])\.)/i;
-
-function assertPublicHttpUrl(raw: string): URL {
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    throw new Error(`invalid URL: ${raw}`);
-  }
-  if (u.protocol !== "https:" && u.protocol !== "http:") {
-    throw new Error(`blocked URL scheme: ${u.protocol}`);
-  }
-  if (BLOCKED_HOST_RE.test(u.hostname)) {
-    throw new Error(`blocked non-public host: ${u.hostname}`);
-  }
-  return u;
-}
+export { assertPublicHttpUrl };
 
 export interface FetchOptions {
   method?: "GET" | "POST";

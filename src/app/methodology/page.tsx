@@ -273,6 +273,47 @@ export default function MethodologyPage() {
         </ul>
       </Section>
 
+      <Section id="public-media-finance" title="Julkisen median rahoitus">
+        <p>
+          Julkisen median (esim. Yleisradio Oy) profiilin <strong>Rahoitus</strong>-, <strong>Rahankäyttö</strong>-,
+          <strong>Johto</strong>- ja <strong>Hallinto</strong>-osiossa käytetään kahta erillistä, toisiaan
+          täydentävää tietotyyppiä, joita ei koskaan lasketa yhteen selittämättä laskentatapaa:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Tilinpäätöserät</strong> (FinancialStatementItem) — tilinpäätöksen luokkatason
+            vuosittaista tuotto- ja kulusummat (esim. henkilöstökulut, lähetysoikeudet). Jokainen erä
+            viittaa viralliseen dokumenttiin (reportUrl). Kokonaissumma-merkitty erä on tilintarkastettu
+            kokonaissumma; luokka- ja kokonaiserää ei summata yhteen (kaksoislaskennan esto).
+          </li>
+          <li>
+            <strong>Rahavirrat</strong> (FinancialFlow) — tosiasialliset toimija-väliset rahansiirrot
+            (esim. valtion rahoitus → Yle). Vain silloin, kun rahan liikkuminen on dokumentoitu toimijoiden
+            välillä; luokkatason summia ei keksitä toimijakohtaisiksi virroiksi.
+          </li>
+        </ul>
+        <p className="mt-2">
+          Summan tarkkuus merkitään aina: <strong>EXACT</strong> (tilintarkastettu/virallinen),
+          <strong>REPORTED</strong> (ilmoitettu, ei tilintarkastettu), <strong>CALCULATED</strong>
+          (johdettu lähdeaineistosta), <strong>ESTIMATED</strong> (arvio) tai <strong>UNKNOWN</strong>.
+          Arviota ei koskaan esitetä tarkkana hintana.
+        </p>
+      </Section>
+
+      <Section id="benefits" title="Lahjat, palkinnot ja edut">
+        <p>
+          Lahja-, etu-, vieraanvaraisuus- ja palkintotapahtumat ovat ensimmäisen luokan,
+          <strong>lähdeperustaisia</strong> tapahtumia (BenefitEvent). Sääntöjä:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li><strong>Ei mitään ilman lähdettä.</strong> Manifestissa on vain tapahtumia, joille on olemassa uskottava julkinen lähde; muuten järjestelmä sanoo &quot;ei riittävän luotettavaa lähdettä&quot;.</li>
+          <li><strong>Ei arvioita tarkkoina summina.</strong> Summan tarkkuus (EXACT/REPORTED/CALCULATED/ESTIMATED/UNKNOWN) näytetään aina.</li>
+          <li><strong>Automaattinen julkaisu vain virallisesta rekisteristä.</strong> Tarkka virallinen rekisteritieto voi julkaista automaattisesti; kaikki muu menee ylläpidon tarkistusjonoon (/admin/benefits).</li>
+          <li><strong>Palkinnon saaminen, voittajan valinta ja tuomaristossa toimiminen ovat erillisiä faktoja</strong>, eikä niitä yhdistetä.</li>
+          <li><strong>Kansainväliset lahjat ovat geneerisiä.</strong> Malli tukee mitä tahansa tahoja (ulkomainen valtio, presidentti, suurlähetystö, hallitus, kansainvälinen järjestö), mutta tapahtumia lisätään vain todisteilla.</li>
+        </ul>
+      </Section>
+
       <Section id="content-analysis" title="Sisältöanalyysi (puolueiden käsittely)">
         <p>
           Tämä ominaisuus on <strong>data-analyysi</strong>: se laskee julkisesta

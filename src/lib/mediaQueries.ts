@@ -7,7 +7,8 @@
 import { db } from "@/lib/db";
 import { publicVisibleWhere } from "@/lib/verification";
 import { JOURNALIST_SUBTYPES } from "@/lib/journalism";
-import type { JournalisticGenre } from "@prisma/client";
+import { PUBLIC_BENEFIT_STATUSES } from "@/lib/benefits";
+import type { JournalisticGenre, EntityType } from "@prisma/client";
 
 // ---------------------------------------------------------------------------- journalists
 
@@ -240,6 +241,268 @@ export async function getMediaProfile(entityId: string) {
   const owner = ownerRel ? ownerRel.targetEntity : null;
 
   return { entity, outlet, journalists, relationships, articleStats, latestArticles, party, owner };
+}
+
+// ---------------------------------------------------------------------------- public media finance (section 3 & 6)
+
+export interface FinanceYear {
+  year: number;
+  income: { category: string; categoryLabel: string; amount: number; valueType: string; isTotal: boolean; note: string | null; reportUrl: string }[];
+  expenditure: { category: string; categoryLabel: string; amount: number; valueType: string; isTotal: boolean; note: string | null; reportUrl: string }[];
+}
+
+/** Year-by-year financial-statement line items for an organisation. */
+export async function getMediaFinance(entityId: string): Promise<FinanceYear[]> {
+  const rows = await db.financialStatementItem.findMany({
+    where: { entityId },
+    orderBy: [{ fiscalYear: "desc" }, { kind: "asc" }],
+    select: {
+      fiscalYear: true,
+      kind: true,
+      category: true,
+      categoryLabel: true,
+      amount: true,
+      currency: true,
+      valueType: true,
+      isTotal: true,
+      note: true,
+      reportUrl: true,
+      lastVerifiedAt: true,
+    },
+  });
+  const byYear = new Map<number, FinanceYear>();
+  for (const r of rows) {
+    const y = byYear.get(r.fiscalYear) ?? { year: r.fiscalYear, income: [], expenditure: [] };
+    const item = { category: r.category, categoryLabel: r.categoryLabel, amount: Number(r.amount), valueType: r.valueType, isTotal: r.isTotal, note: r.note, reportUrl: r.reportUrl };
+    (r.kind === "INCOME" ? y.income : y.expenditure).push(item);
+    byYear.set(r.fiscalYear, y);
+  }
+  return [...byYear.values()].sort((a, b) => b.year - a.year);
+}
+
+export interface GovernanceBlock {
+  positions: {
+    personId: string;
+    name: string;
+    role: string;
+    startDate: Date | null;
+    endDate: Date | null;
+    isCurrent: boolean;
+    type: EntityType;
+    evidenceUrl: string | null;
+  }[];
+  council: {
+    id: string;
+    name: string;
+    role: string | null;
+    members: { personId: string; name: string; role: string; startDate: Date | null; endDate: Date | null }[];
+    sourceUrl: string | null;
+  } | null;
+}
+
+/** Leadership positions + administrative council for a media organisation. */
+export async function getMediaGovernance(entityId: string): Promise<GovernanceBlock> {
+  const positions = await db.position.findMany({
+    where: { organizationEntityId: entityId },
+    include: { personEntity: { select: { id: true, canonicalName: true, type: true } }, source: { select: { sourceUrl: true } } },
+    orderBy: [{ isCurrent: "desc" }, { startDate: "desc" }],
+    take: 120,
+  });
+
+  // Administrative council: find an entity that SUPERVISES this org, then list
+  // its current members (maintained by the parliament agent / Eduskunta data).
+  const councilRels = await db.relationship.findMany({
+    where: { relationshipType: "SUPERVISES", targetEntityId: entityId, ...publicVisibleWhere },
+    include: { evidence: { include: { source: { select: { sourceUrl: true } } }, take: 1 } },
+    take: 1,
+  });
+  let council: GovernanceBlock["council"] = null;
+  if (councilRels.length > 0) {
+    const councilEntity = await db.entity.findUnique({
+      where: { id: councilRels[0].sourceEntityId },
+      select: { id: true, canonicalName: true, description: true },
+    });
+    if (councilEntity) {
+      const members = await db.relationship.findMany({
+        where: {
+          targetEntityId: councilEntity.id,
+          relationshipType: "MEMBER_OF",
+          ...publicVisibleWhere,
+          OR: [{ endDate: null }, { endDate: { gte: new Date() } }],
+        },
+        include: { sourceEntity: { select: { id: true, canonicalName: true } } },
+        orderBy: { role: "asc" },
+        take: 60,
+      });
+      council = {
+        id: councilEntity.id,
+        name: councilEntity.canonicalName,
+        role: councilRels[0].role ?? null,
+        members: members.map((m) => ({
+          personId: m.sourceEntity.id,
+          name: m.sourceEntity.canonicalName,
+          role: m.role ?? "Jäsen",
+          startDate: m.startDate,
+          endDate: m.endDate,
+        })),
+        sourceUrl: councilRels[0].evidence[0]?.source?.sourceUrl ?? null,
+      };
+    }
+  }
+
+  return {
+    positions: positions.map((p) => ({
+      personId: p.personEntity.id,
+      name: p.personEntity.canonicalName,
+      role: p.role,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      isCurrent: p.isCurrent,
+      type: p.personEntity.type,
+      evidenceUrl: p.source?.sourceUrl ?? null,
+    })),
+    council,
+  };
+}
+
+export interface BenefitRow {
+  id: string;
+  eventType: string;
+  title: string;
+  description: string | null;
+  eventDate: Date | null;
+  monetaryValue: number | null;
+  currency: string | null;
+  valueType: string;
+  selectionRole: string | null;
+  country: string | null;
+  recipient: { id: string; canonicalName: string } | null;
+  giver: { id: string; canonicalName: string } | null;
+  payer: { id: string; canonicalName: string } | null;
+  evidenceGrade: string;
+  sourceUrl: string | null;
+  sourceName: string | null;
+}
+
+/** Published benefit events (awards, gifts, honours) touching an entity. */
+export async function getEntityBenefits(entityId: string): Promise<BenefitRow[]> {
+  const rows = await db.benefitEvent.findMany({
+    where: {
+      reviewStatus: { in: PUBLIC_BENEFIT_STATUSES },
+      OR: [
+        { recipientEntityId: entityId },
+        { giverEntityId: entityId },
+        { payerEntityId: entityId },
+        { beneficiaryEntityId: entityId },
+      ],
+    },
+    include: {
+      recipientEntity: { select: { id: true, canonicalName: true } },
+      giverEntity: { select: { id: true, canonicalName: true } },
+      payerEntity: { select: { id: true, canonicalName: true } },
+      source: { select: { sourceUrl: true, sourceName: true } },
+    },
+    orderBy: [{ eventDate: "desc" }, { createdAt: "desc" }],
+    take: 200,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    eventType: r.eventType,
+    title: r.title,
+    description: r.description,
+    eventDate: r.eventDate,
+    monetaryValue: r.monetaryValue ? Number(r.monetaryValue) : null,
+    currency: r.currency,
+    valueType: r.valueType,
+    selectionRole: r.selectionRole,
+    country: r.country,
+    recipient: r.recipientEntity,
+    giver: r.giverEntity,
+    payer: r.payerEntity,
+    evidenceGrade: r.evidenceGrade,
+    sourceUrl: r.source?.sourceUrl ?? null,
+    sourceName: r.source?.sourceName ?? null,
+  }));
+}
+
+export interface TimelineEntry {
+  date: Date | null;
+  label: string;
+  detail: string | null;
+  kind: "role" | "money" | "event";
+}
+
+/** Recent published award/benefit events for the Explore view. */
+export async function getRecentBenefits(limit = 30): Promise<(BenefitRow & { updatedAt: Date })[]> {
+  const rows = await db.benefitEvent.findMany({
+    where: { reviewStatus: { in: PUBLIC_BENEFIT_STATUSES } },
+    include: {
+      recipientEntity: { select: { id: true, canonicalName: true } },
+      giverEntity: { select: { id: true, canonicalName: true } },
+      payerEntity: { select: { id: true, canonicalName: true } },
+      source: { select: { sourceUrl: true, sourceName: true } },
+    },
+    orderBy: [{ eventDate: "desc" }, { updatedAt: "desc" }],
+    take: limit,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    eventType: r.eventType,
+    title: r.title,
+    description: r.description,
+    eventDate: r.eventDate,
+    monetaryValue: r.monetaryValue ? Number(r.monetaryValue) : null,
+    currency: r.currency,
+    valueType: r.valueType,
+    selectionRole: r.selectionRole,
+    country: r.country,
+    recipient: r.recipientEntity,
+    giver: r.giverEntity,
+    payer: r.payerEntity,
+    evidenceGrade: r.evidenceGrade,
+    sourceUrl: r.source?.sourceUrl ?? null,
+    sourceName: r.source?.sourceName ?? null,
+    updatedAt: r.updatedAt,
+  }));
+}
+
+/** Top awarding organisations (documented, published awards). */
+export async function getTopAwardGivers(limit = 10): Promise<{ id: string; name: string; awards: number }[]> {
+  const groups = await db.benefitEvent.groupBy({
+    by: ["giverEntityId"],
+    where: { reviewStatus: { in: PUBLIC_BENEFIT_STATUSES }, giverEntityId: { not: null } },
+    _count: { _all: true },
+    orderBy: { _count: { giverEntityId: "desc" } },
+    take: limit,
+  });
+  const ids = groups.map((g) => g.giverEntityId!).filter(Boolean);
+  const entities = ids.length ? await db.entity.findMany({ where: { id: { in: ids } }, select: { id: true, canonicalName: true } }) : [];
+  const byId = new Map(entities.map((e) => [e.id, e.canonicalName]));
+  return groups.map((g) => ({ id: g.giverEntityId!, name: byId.get(g.giverEntityId!) ?? "—", awards: g._count._all })).sort((a, b) => b.awards - a.awards);
+}
+
+/** Lightweight timeline: leadership roles + funding milestones + benefit events. */
+export async function getMediaTimeline(entityId: string, finance: FinanceYear[]): Promise<TimelineEntry[]> {
+  const entries: TimelineEntry[] = [];
+  const positions = await db.position.findMany({
+    where: { organizationEntityId: entityId },
+    select: { role: true, startDate: true, endDate: true, personEntity: { select: { canonicalName: true } } },
+  });
+  for (const p of positions) {
+    entries.push({ date: p.startDate, label: p.role ?? "Tehtävä", detail: p.personEntity.canonicalName, kind: "role" });
+  }
+  for (const y of finance) {
+    const total = y.income.find((i) => i.isTotal) ?? y.income[0];
+    if (total) entries.push({ date: new Date(Date.UTC(y.year, 11, 31)), label: `Kokonaistuotot ${y.year}`, detail: null, kind: "money" });
+  }
+  const benefits = await getEntityBenefits(entityId);
+  for (const b of benefits) {
+    entries.push({ date: b.eventDate, label: b.title, detail: b.giver?.canonicalName ?? null, kind: "event" });
+  }
+  return entries
+    .filter((e) => e.date)
+    .sort((a, b) => (b.date as Date).getTime() - (a.date as Date).getTime())
+    .slice(0, 150);
 }
 
 // ---------------------------------------------------------------------------- politician ↔ media (section 8)

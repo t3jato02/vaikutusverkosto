@@ -144,6 +144,8 @@ export const FLOW_TYPE_LABELS: Record<FlowType, Label> = {
   FOUNDATION_GRANT: { fi: "Säätiöapuraha", en: "Foundation grant" },
   ASSOCIATION_FUNDING: { fi: "Yhdistysrahoitus", en: "Association funding" },
   PUBLIC_PROJECT_FUNDING: { fi: "Julkishankkeen rahoitus", en: "Public project funding" },
+  RIGHTS_PAYMENT: { fi: "Tekijänoikeuskorvaus", en: "Rights payment" },
+  CONTENT_PROCUREMENT: { fi: "Sisältöhankinta", en: "Content procurement" },
   OTHER: { fi: "Muu rahavirta", en: "Other financial flow" },
 };
 

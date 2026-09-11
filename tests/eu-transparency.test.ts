@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import "dotenv/config";
 import { euTransparencyAdapter } from "@/lib/agents/euTransparency";
-import type { RunContext } from "@/lib/agents/types";
+import type { RunContext, NormalizedFact } from "@/lib/agents/types";
+
+const parseRel = async (ctx: RunContext, doc: unknown, raw: unknown) =>
+  (await euTransparencyAdapter["parse"](ctx, doc as never, raw as never)) as NormalizedFact[];
 
 const ctx = { log: () => {}, stats: {} } as unknown as RunContext;
 
@@ -21,7 +24,7 @@ const doc = { id: "eu-tr:12345678901-23", url: "https://transparency-register.eu
 
 describe("EU Transparency Register parser (Sprint C4)", () => {
   it("emits a deterministic SOURCE_CONFIRMED registration relationship", async () => {
-    const facts = await euTransparencyAdapter.parse(ctx, doc, orgMeta);
+    const facts = await parseRel(ctx, doc, orgMeta);
     const reg = facts.find((f) => f.relationshipType === "REGISTERED_LOBBY_ORGANIZATION");
     expect(reg).toBeTruthy();
     expect(reg!.source.name).toBe("Testijärjestö ry");
@@ -35,7 +38,7 @@ describe("EU Transparency Register parser (Sprint C4)", () => {
   });
 
   it("clients become rule candidates (REPRESENTS_INTERESTS_OF), never auto-published", async () => {
-    const facts = await euTransparencyAdapter.parse(ctx, doc, orgMeta);
+    const facts = await parseRel(ctx, doc, orgMeta);
     const clientFacts = facts.filter((f) => f.relationshipType === "REPRESENTS_INTERESTS_OF");
     expect(clientFacts.length).toBe(2);
     for (const c of clientFacts) {
@@ -45,7 +48,7 @@ describe("EU Transparency Register parser (Sprint C4)", () => {
   });
 
   it("never produces an INFLUENCES relationship", async () => {
-    const facts = await euTransparencyAdapter.parse(ctx, doc, orgMeta);
+    const facts = await parseRel(ctx, doc, orgMeta);
     expect(facts.every((f) => String(f.relationshipType) !== "INFLUENCES")).toBe(true);
   });
 

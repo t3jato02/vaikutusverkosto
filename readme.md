@@ -132,6 +132,10 @@ Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git r
 | `npm test` | Vitest (unit + DB invariants) |
 | `npm run e2e` | Playwright release gate (needs `npm run build` + `npm start`) |
 | `npm run ingest:parliament` | Parliament Agent — MPs, parties, committees (real Eduskunta data) |
+| `npm run ingest:yle` | Yle Agent — Yleisradio Oy rahoitus, johto, hallinto (real yle.fi data) |
+| `npm run ingest:awards` | Award Agent — dokumentoidut Suuren journalistipalkinnon voittajat |
+| `npm run ingest:gifts` | Gift & Benefit Agent — lahja-/etutapahtumien kanava (lähdeperustainen manifesti) |
+| `npm run reconcile:yle` | Yle-duplikaattien yhdistäminen (data-laatu, auditoitu) |
 | `npm run ingest:seed` | Clearly-marked demo flows (fictional entities) |
 | `npm run ingest:media` | Media & journalism pilot (real RSS/author data) |
 | `npm run ingest:identity` | Identity-framing QA pilot (documented public bio facts + classifier) |
@@ -143,7 +147,7 @@ Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git r
 `/` · `/search` · `/person/[slug]` · `/organization/[slug]` · `/company/[slug]` ·
 `/institution/[slug]` · `/media` · `/media/[slug]` · `/media/identity-framing` · `/toimittajat` · `/toimittajat/[slug]` · `/explore` ·
 `/money` · `/decisions` · `/map` · `/changes` · `/compare` · `/investigate` · `/methodology` ·
-`/sources` · `/about` · `/corrections` · `/admin` (+ `/admin/agents`, `/admin/review`) ·
+`/sources` · `/about` · `/corrections` · `/admin` (+ `/admin/agents`, `/admin/review`, `/admin/benefits`) ·
 `/api` (docs) · public API under `/api/*`
 
 ## Data model (summary)
@@ -161,6 +165,13 @@ Bake the SHA on CLI deploys: `vercel deploy --prod --build-env BUILD_SHA=$(git r
   corpus), `ContentAnalysis` (versioned, recomputable coverage), `PoliticalAffiliation` (strict
   A/B/C model, human-review-gated), `PersonalFact` (never-inferred biographic fields with source +
   evidence grade).
+- **Public media finance** — `FinancialStatementItem` (year-by-year audited income/expenditure line
+  items; grand totals flagged so categories and totals are never double-counted),
+  `BenefitEvent` (first-class gifts / awards / honours / portraits / hospitality with exact-vs-reported
+  value precision and an admin review queue at `/admin/benefits`). Yleisradio Oy is the first fully
+  populated public-media profile: funding 2020–2025, expenditure breakdown, CEOs, board, management
+  group, administrative council and documented awards, all source-backed (`yle.fi` annual reports,
+  board/management pages, Suuri journalistipalkinto winners list).
 - **Identity framing (Syntymämaa & media-identiteetti)** — a fact layer that keeps separate:
   `BirthOriginFact` (muuttumaton syntymämaa/-paikka), `CitizenshipFact` (juridinen status, useita sallittu),
   `ResidenceFact` (asuinmaa/-historia), `SelfIdentificationFact` (henkilön oma julkinen identiteetti,

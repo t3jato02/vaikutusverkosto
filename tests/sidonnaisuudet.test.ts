@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import "dotenv/config";
 import { sidonnaisuudetAdapter } from "@/lib/agents/sidonnaisuudet";
-import type { RunContext } from "@/lib/agents/types";
+import type { RunContext, NormalizedFact } from "@/lib/agents/types";
+
+const parseRel = async (ctx: RunContext, doc: unknown, raw: unknown) =>
+  (await sidonnaisuudetAdapter["parse"](ctx, doc as never, raw as never)) as NormalizedFact[];
 
 const ctx = { log: () => {}, stats: {} } as unknown as RunContext;
 
@@ -18,7 +21,7 @@ const doc = {
 
 describe("sidonnaisuudet rule extraction (B.5 Phase 6)", () => {
   it("emits rule-based candidates only for clearly-parseable board/council roles", async () => {
-    const facts = await sidonnaisuudetAdapter.parse(
+    const facts = await parseRel(
       ctx,
       doc,
       detail([
@@ -41,7 +44,7 @@ describe("sidonnaisuudet rule extraction (B.5 Phase 6)", () => {
   });
 
   it("emits nothing when there are no declared interests", async () => {
-    const facts = await sidonnaisuudetAdapter.parse(
+    const facts = await parseRel(
       ctx,
       doc,
       detail([{ RyhmaOtsikko: "Kaikki", Sidonta: "Ei ilmoitettavia sidonnaisuuksia" }]),

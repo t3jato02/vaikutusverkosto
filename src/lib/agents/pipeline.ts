@@ -6,7 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { MAX_RUN_MINUTES, type RunContext, type RunReport, type SourceAdapter } from "./types";
 import { TransientError, sleep } from "./http";
-import { ensureSource, markSourceFailure, markSourceSuccess, publishVerifiedFact } from "./publish";
+import { ensureSource, markSourceFailure, markSourceSuccess, publishVerifiedFact, publishBenefitEvent, publishStatementItem } from "./publish";
 import { ensureRegistrySource, isSourceEnabled, recordRegistryCheck } from "./sourceRegistry";
 import { collect, markDocumentProcessed } from "@/lib/ingestion/collector";
 import type { DocumentDescriptor } from "@/lib/ingestion/types";
@@ -188,6 +188,16 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
         const facts = await adapter.parse(ctx, doc, cd.payload!.json);
         stats.proposed += facts.length;
         for (const fact of facts) {
+          if (fact.kind === "benefit") {
+            const result = await publishBenefitEvent(ctx, fact);
+            if (result.action === "rejected") ctx.log(`rejected benefit: ${result.reason}`);
+            continue;
+          }
+          if (fact.kind === "statement") {
+            const result = await publishStatementItem(ctx, fact);
+            if (result === "rejected") ctx.log("rejected statement item");
+            continue;
+          }
           const proposed = {
             kind: fact.kind,
             source: fact.source,
@@ -206,7 +216,7 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
             confidence: fact.confidence,
             evidenceUrl: fact.evidenceUrl,
             evidenceTitle: doc.title ?? null,
-            sourceType: adapter.sourceType,
+            sourceType: fact.sourceTypeOverride ?? adapter.sourceType,
             sourceName: adapter.name,
             publisher: adapter.publisher,
             extractionMethod: fact.extractionMethod,

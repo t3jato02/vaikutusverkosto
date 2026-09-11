@@ -43,10 +43,11 @@ export default async function AdminPage() {
           </p>
         </div>
         <nav className="flex flex-wrap gap-2 text-xs">
-          <Link href="/admin/agents" className="btn">Agentit</Link>
-          <Link href="/admin/evidence" className="btn">Todisteet</Link>
-          <Link href="/admin/review" className="btn">Tarkistusjono</Link>
-          <Link href="/admin/vaikuta" className="btn btn-primary">Vaikuta</Link>
+<Link href="/admin/agents" className="btn">Agentit</Link>
+<Link href="/admin/evidence" className="btn">Todisteet</Link>
+<Link href="/admin/review" className="btn">Tarkistusjono</Link>
+<Link href="/admin/benefits" className="btn">Lahjat & palkinnot</Link>
+<Link href="/admin/vaikuta" className="btn btn-primary">Vaikuta</Link>
         </nav>
       </header>
 
