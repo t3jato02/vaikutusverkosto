@@ -15,6 +15,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EntityType, FlowType, FundingType, SourceType, type Prisma, type PrismaClient } from "@prisma/client";
 import type { NormalizedFact, RunContext, SourceAdapter, SourceDocument } from "./types";
+import { assertSchema } from "@/lib/ingestion/schemaFingerprint";
+
+// Columns the parser cannot work without. If the official export drops one, the
+// year is skipped (per-year isolation) rather than producing malformed rows.
+const FTS_REQUIRED_COLUMNS = [
+  "Beneficiary country",
+  "Name of beneficiary",
+  "Beneficiary's contracted amount (EUR)",
+];
 
 const DATASET_URL = (year: number) =>
   `https://ec.europa.eu/budget/financial-transparency-system/download/${year}_FTS_dataset_en.xlsx`;
@@ -140,6 +149,8 @@ async function streamFinnishRecords(path: string, year: number, log: (m: string)
       if (!header) {
         header = v.map((x) => (x == null ? "" : String(x).trim()));
         header.forEach((h, i) => (idx[h] = i));
+        const schema = assertSchema(`EU FTS ${year}`, { observed: header, required: FTS_REQUIRED_COLUMNS });
+        log(`FTS ${year}: schema ok — ${schema.observedCount} columns (fingerprint ${schema.fingerprint})`);
         continue;
       }
       const g = (name: string) => v[idx[name]];

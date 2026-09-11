@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getPersonProfile, entityUrlFor } from "@/lib/queries";
+import { getPersonProfile, entityUrlFor, projectsForEntity, projectUrlFor } from "@/lib/queries";
 import { entityLabel, fundingTypeLabel, countryLabel } from "@/lib/constants";
 import { formatDate, formatDateLong, formatEur } from "@/lib/format";
 import { toRelRows, sortRelRows } from "@/lib/relRows";
@@ -18,6 +18,7 @@ export default async function OrganizationProfile({ entity }: { entity: OrgEntit
   const profile = await getPersonProfile(entity.id);
   const relRows = sortRelRows(toRelRows(profile.relationships, entity.id));
   const foreignFlows = profile.flows.filter((f) => f.isForeign);
+  const projects = await projectsForEntity(entity.id);
 
   return (
     <div className="space-y-8">
@@ -120,6 +121,29 @@ export default async function OrganizationProfile({ entity }: { entity: OrgEntit
           </ul>
         )}
       </section>
+
+      {projects.length > 0 && (
+        <section aria-label="Projektit">
+          <h2 className="section-title mb-2">Projektit</h2>
+          <ul className="card divide-y divide-line">
+            {projects.map((p) => (
+              <li key={p.project.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2 text-sm">
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  <Link href={projectUrlFor(p.project.id, p.project.name)} className="font-medium text-accent hover:underline">
+                    {p.project.name}
+                  </Link>
+                  <span className="text-[11px] text-muted">
+                    {" "}· {p.role === "recipient" ? "saaja" : "rahoittaja"}
+                    {p.project.programme ? ` · ${p.project.programme}` : ""}
+                    {p.years.length ? ` · ${p.years.join(", ")}` : ""}
+                  </span>
+                </span>
+                <span className="shrink-0 tabular-nums text-muted">{formatEur(p.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {foreignFlows.length > 0 && (
         <section aria-label="Kansainväliset yhteydet">

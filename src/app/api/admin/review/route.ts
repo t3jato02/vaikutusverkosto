@@ -29,6 +29,9 @@ export async function POST(req: Request) {
   const action = String(form.get("action") ?? "");
   const note = String(form.get("note") ?? "").trim() || undefined;
   const entityId = String(form.get("entityId") ?? "").trim() || undefined;
+  // Keyboard-driven review panel posts with mode=json and wants a JSON reply,
+  // not a 303 back to the page.
+  const wantsJson = String(form.get("mode") ?? "") === "json";
 
   if (!id || !action) return NextResponse.json({ error: "missing_fields" }, { status: 400 });
 
@@ -60,5 +63,6 @@ export async function POST(req: Request) {
   }
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  if (wantsJson) return NextResponse.json({ ok: true });
   return NextResponse.redirect(new URL("/admin/review", req.url), 303);
 }

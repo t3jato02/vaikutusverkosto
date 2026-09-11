@@ -7,6 +7,8 @@ import {
   recordRegistryCheck,
   isSourceEnabled,
   ensureRegistrySource,
+  sourceAlert,
+  nextDueAt,
 } from "@/lib/agents/sourceRegistry";
 import { listAdapters } from "@/lib/agents/registry";
 import { db } from "@/lib/db";
@@ -75,5 +77,49 @@ describe.skipIf(!hasDb)("Source Registry (Sprint B)", () => {
 
   it("ensureRegistrySource returns null for an unknown adapter", async () => {
     expect(await ensureRegistrySource("no-such-adapter")).toBeNull();
+  });
+});
+
+describe("ingestion alerts (Sprint C5, Phase 28)", () => {
+  // Relative to "now" — a fixed calendar date here would eventually become
+  // stale and make the "overdue" check fire on an otherwise-healthy fixture.
+  const recentCheck = new Date(Date.now() - 2 * 3600_000); // 2h ago — within a daily cadence
+  const base = {
+    enabled: true,
+    consecutiveFailures: 0,
+    lastSuccessAt: recentCheck,
+    lastCheckedAt: recentCheck,
+    lastError: null as string | null,
+    lastRunDocsChecked: 120,
+    updateCadence: "daily",
+  };
+
+  it("a healthy, producing source is OK", () => {
+    expect(sourceAlert(base).level).toBe("OK");
+  });
+
+  it("a previously-healthy source that finds zero documents is a WARNING", () => {
+    const a = sourceAlert({ ...base, lastRunDocsChecked: 0 });
+    expect(a.level).toBe("WARNING");
+    expect(a.reasons.join(" ")).toMatch(/ei löytänyt yhtään dokumenttia/);
+  });
+
+  it("schema drift in lastError escalates to FAILING", () => {
+    const a = sourceAlert({ ...base, lastError: "EU FTS 2024: source schema drift — required field(s) missing: Year" });
+    expect(a.level).toBe("FAILING");
+  });
+
+  it("three consecutive failures is FAILING; one is DEGRADED", () => {
+    expect(sourceAlert({ ...base, consecutiveFailures: 3 }).level).toBe("FAILING");
+    expect(sourceAlert({ ...base, consecutiveFailures: 1 }).level).toBe("DEGRADED");
+  });
+
+  it("a disabled source raises no alert", () => {
+    expect(sourceAlert({ ...base, enabled: false, consecutiveFailures: 9 }).level).toBe("OK");
+  });
+
+  it("nextDueAt advances by the cadence step", () => {
+    const due = nextDueAt({ lastCheckedAt: new Date("2026-09-06T04:00:00Z"), updateCadence: "weekly" });
+    expect(due?.toISOString().slice(0, 10)).toBe("2026-09-13");
   });
 });
