@@ -3,9 +3,6 @@ import "dotenv/config";
 import { vnkOwnershipAdapter } from "@/lib/agents/vnkOwnership";
 import type { RunContext, NormalizedFact } from "@/lib/agents/types";
 
-const parseRel = async (ctx: RunContext, doc: unknown, raw: unknown) =>
-  (await vnkOwnershipAdapter["parse"](ctx, doc as never, raw as never)) as NormalizedFact[];
-
 const ctx = { log: () => {}, stats: {} } as unknown as RunContext;
 
 describe("VNK state ownership adapter (Sprint C4)", () => {
@@ -24,7 +21,7 @@ describe("VNK state ownership adapter (Sprint C4)", () => {
   it("emits a temporal, evidenced OWNS fact Suomen valtio → company with a percentage", async () => {
     const docs = await vnkOwnershipAdapter.discover(ctx);
     const solidium = docs.find((d) => (d.meta as { name: string }).name === "Solidium Oy")!;
-    const [f] = await parseRel(ctx, solidium, solidium.meta);
+    const [f] = (await vnkOwnershipAdapter.parse(ctx, solidium, solidium.meta)) as [NormalizedFact];
     expect(f.kind).toBe("relationship");
     expect(f.relationshipType).toBe("OWNS");
     expect(f.source.name).toBe("Suomen valtio");
@@ -40,7 +37,7 @@ describe("VNK state ownership adapter (Sprint C4)", () => {
   it("every holding percentage is within [0, 100]", async () => {
     const docs = await vnkOwnershipAdapter.discover(ctx);
     for (const d of docs) {
-      const [f] = await parseRel(ctx, d, d.meta);
+      const [f] = (await vnkOwnershipAdapter.parse(ctx, d, d.meta)) as [NormalizedFact];
       expect(f.ownershipPercent).toBeGreaterThan(0);
       expect(f.ownershipPercent).toBeLessThanOrEqual(100);
     }

@@ -14,9 +14,6 @@ import type { RunContext, SourceDocument, NormalizedFact } from "@/lib/agents/ty
 import { ensureRegistrySource } from "@/lib/agents/sourceRegistry";
 import { db } from "@/lib/db";
 
-const parseRel = async (ctx: RunContext, doc: unknown, raw: unknown) =>
-  (await euFtsAdapter["parse"](ctx, doc as never, raw as never)) as NormalizedFact[];
-
 const ctx = { log: () => {}, stats: {} } as unknown as RunContext;
 const doc = {
   id: "eu-fts:2023:JAG.1:JAG.1.1:1234567-8",
@@ -52,7 +49,7 @@ function rec(over: Record<string, unknown> = {}) {
 
 describe("EU FTS parser (Sprint C2)", () => {
   it("emits one evidenced foreign flow EC → Finnish beneficiary", async () => {
-    const facts = await parseRel(ctx, doc, rec());
+    const facts = (await euFtsAdapter.parse(ctx, doc, rec())) as NormalizedFact[];
     expect(facts.length).toBe(1);
     const f = facts[0];
     expect(f.kind).toBe("flow");
@@ -75,26 +72,26 @@ describe("EU FTS parser (Sprint C2)", () => {
   });
 
   it("classifies the Finnish State beneficiary as GOVERNMENT_BODY / GOVERNMENT (Phase 18)", async () => {
-    const [f] = await parseRel(ctx, doc, rec({ name: "SUOMEN TASAVALTA*REPUBLIQUE DE FINLANDE REPUBLIC OF FINLAND", vat: "" }));
+    const [f] = (await euFtsAdapter.parse(ctx, doc, rec({ name: "SUOMEN TASAVALTA*REPUBLIQUE DE FINLANDE REPUBLIC OF FINLAND", vat: "" }))) as [NormalizedFact];
     expect(f.target.type).toBe("GOVERNMENT_BODY");
     expect(f.target.entityCategory).toBe("GOVERNMENT");
     // a normal company is unaffected
-    const [g] = await parseRel(ctx, doc, rec({ name: "TEST OY" }));
+    const [g] = (await euFtsAdapter.parse(ctx, doc, rec({ name: "TEST OY" }))) as [NormalizedFact];
     expect(g.target.type).toBe("ORGANIZATION");
   });
 
   it("maps a service/advisory contract to PROCUREMENT", async () => {
-    const facts = await parseRel(ctx, doc, rec({ contractType: "Advisory: non-IT" }));
+    const facts = (await euFtsAdapter.parse(ctx, doc, rec({ contractType: "Advisory: non-IT" }))) as NormalizedFact[];
     expect(facts[0].fundingType).toBe("PROCUREMENT");
   });
 
   it("skips zero and negative amounts", async () => {
-    expect(await parseRel(ctx, doc, rec({ amount: 0 }))).toEqual([]);
-    expect(await parseRel(ctx, doc, rec({ amount: -5 }))).toEqual([]);
+    expect(await euFtsAdapter.parse(ctx, doc, rec({ amount: 0 }))).toEqual([]);
+    expect(await euFtsAdapter.parse(ctx, doc, rec({ amount: -5 }))).toEqual([]);
   });
 
   it("keeps the source's raw contract type verbatim", async () => {
-    const [f] = await parseRel(ctx, doc, rec({ contractType: "Action Grant" }));
+    const [f] = (await euFtsAdapter.parse(ctx, doc, rec({ contractType: "Action Grant" }))) as [NormalizedFact];
     expect(f.rawFundingType).toBe("Action Grant");
   });
 
@@ -119,7 +116,7 @@ describe("EU FTS parser (Sprint C2)", () => {
   });
 
   it("no award/payment date is invented — flowDate stays null, project period is kept", async () => {
-    const [f] = await parseRel(ctx, doc, rec());
+    const [f] = (await euFtsAdapter.parse(ctx, doc, rec())) as [NormalizedFact];
     expect(f.startDate).toBeNull();
     expect(f.endDate).toBeNull();
     expect(f.periodStart).toBeInstanceOf(Date);

@@ -3,9 +3,6 @@ import "dotenv/config";
 import { sidonnaisuudetAdapter } from "@/lib/agents/sidonnaisuudet";
 import type { RunContext, NormalizedFact } from "@/lib/agents/types";
 
-const parseRel = async (ctx: RunContext, doc: unknown, raw: unknown) =>
-  (await sidonnaisuudetAdapter["parse"](ctx, doc as never, raw as never)) as NormalizedFact[];
-
 const ctx = { log: () => {}, stats: {} } as unknown as RunContext;
 
 function detail(declarations: { RyhmaOtsikko?: string; Sidonta?: string }[]) {
@@ -21,7 +18,7 @@ const doc = {
 
 describe("sidonnaisuudet rule extraction (B.5 Phase 6)", () => {
   it("emits rule-based candidates only for clearly-parseable board/council roles", async () => {
-    const facts = await parseRel(
+const facts = (await sidonnaisuudetAdapter.parse(
       ctx,
       doc,
       detail([
@@ -30,8 +27,8 @@ describe("sidonnaisuudet rule extraction (B.5 Phase 6)", () => {
         { RyhmaOtsikko: "Palkatut toimet", Sidonta: "Ei ilmoitettavia sidonnaisuuksia" },
         { RyhmaOtsikko: "Muut sidonnaisuudet", Sidonta: "-" },
         { RyhmaOtsikko: "Ammatin harjoittaminen", Sidonta: "Toimin freelancer-toimittajana." },
-      ]),
-    );
+]),
+    )) as NormalizedFact[];
     expect(facts.length).toBe(2);
     expect(facts.every((f) => f.extractionMethod === "rule")).toBe(true);
     expect(facts.every((f) => f.confidence === "MEDIUM")).toBe(true);
@@ -44,7 +41,7 @@ describe("sidonnaisuudet rule extraction (B.5 Phase 6)", () => {
   });
 
   it("emits nothing when there are no declared interests", async () => {
-    const facts = await parseRel(
+    const facts = await sidonnaisuudetAdapter.parse(
       ctx,
       doc,
       detail([{ RyhmaOtsikko: "Kaikki", Sidonta: "Ei ilmoitettavia sidonnaisuuksia" }]),

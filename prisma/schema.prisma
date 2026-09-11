@@ -50,12 +50,173 @@ enum Confidence {
   DISPUTED
 }
 
+// Evidence grade: source strength of a specific claim, independent of Confidence.
+//   A — primary / official source
+//   B — strong journalistic or institutional source
+//   C — corroborated by several independent sources
+//   D — a single secondary source
+//   E — unverified; must never be shown as fact in the public UI
+// (Convergent with the definition carried by sprint-media-yle; see
+//  docs/institutional-power/PARALLEL_WORK_CONTRACT.md — schema-ownership note.)
+enum EvidenceGrade {
+  A
+  B
+  C
+  D
+  E
+}
+
 enum EntityStatus {
   ACTIVE
   INACTIVE
   FORMER
   PROPOSED
   UNKNOWN
+}
+
+// ---------------------------------------------------------------- institutional power (foundation)
+//
+// Role types for a person's documented institutional role (RoleAssignment).
+// A person may hold MANY of these simultaneously (former minister + company
+// board chair + foundation trustee). No category is mutually exclusive, and no
+// role type is a value judgment — the source documents the role.
+enum RoleType {
+  MP
+  MINISTER
+  MUNICIPAL_POLITICIAN
+  CIVIL_SERVANT
+  CEO
+  DEPUTY_CEO
+  EXECUTIVE
+  BOARD_CHAIR
+  BOARD_VICE_CHAIR
+  BOARD_MEMBER
+  SUPERVISORY_BOARD
+  ADVISORY_BOARD
+  COUNCIL_MEMBER
+  DIRECTOR_GENERAL
+  SECRETARY_GENERAL
+  CHAIR
+  PRESIDENT
+  TRUSTEE
+  REGULATOR
+  POLITICAL_APPOINTEE
+  OWNER_REPRESENTATIVE
+  COMMITTEE_MEMBER
+  SECTOR_COUNCIL
+  ORGANISATION_LEADER
+  UNION_LEADER
+  NGO_LEADER
+  FOUNDATION_EXECUTIVE
+  JOURNALIST
+  MEDIA_EXECUTIVE
+  ACADEMIC_EXECUTIVE
+  PROFESSOR
+  INVESTOR
+  BANKER
+  INVESTMENT_BANKER
+  INSTITUTIONAL_INVESTOR_EXECUTIVE
+  PUBLIC_AGENCY_EXECUTIVE
+  INFRASTRUCTURE_EXECUTIVE
+  DEFENCE_INDUSTRY_EXECUTIVE
+  LOBBYIST
+  OTHER
+}
+
+// Neutral sector taxonomy for organisations. Multiple sectors per organisation
+// (OrganizationSector). A sector is descriptive, never a risk signal, and is
+// assigned only when a public source documents it.
+enum Sector {
+  ENERGY
+  ELECTRICITY_TRANSMISSION
+  ELECTRICITY_DISTRIBUTION
+  DISTRICT_HEATING
+  GAS
+  WATER
+  WASTE
+  FOOD
+  AGRICULTURE
+  FOOD_LOGISTICS
+  BANKING
+  INVESTMENT
+  INSURANCE
+  PENSION
+  PAYMENTS
+  TRANSPORT
+  RAIL
+  AVIATION
+  ROAD_TRANSPORT
+  PUBLIC_TRANSIT
+  PORT
+  MARITIME
+  LOGISTICS
+  TELECOM
+  DATA_NETWORK
+  CLOUD
+  CYBERSECURITY
+  TECHNOLOGY
+  PUBLIC_IT
+  HEALTHCARE
+  PHARMA
+  SOCIAL_SECURITY
+  EMERGENCY_SUPPLY
+  AID_ORGANISATION
+  NGO
+  FOUNDATION
+  EMPLOYER_ORGANISATION
+  LABOUR_ORGANISATION
+  MEDIA
+  EDUCATION
+  RESEARCH
+  DEFENCE
+  SECURITY
+  STATE_OWNED
+  MUNICIPAL_OWNED
+  PUBLIC_AGENCY
+  SPECIAL_ASSIGNMENT
+  ALCOHOL_MONOPOLY
+  GAMBLING
+  OTHER
+}
+
+// Critical-function classification: the nationally significant function an
+// organisation performs IN PUBLIC EVIDENCE. NEVER reconstructed from classified
+// material, HVK lists, emergency plans or security-sensitive facility details.
+enum CriticalFunction {
+  NATIONAL_GRID
+  LOCAL_GRID
+  GAS_TRANSMISSION
+  TELECOMMUNICATIONS
+  PAYMENT_INFRASTRUCTURE
+  FOOD_DISTRIBUTION
+  RAIL_NETWORK
+  AVIATION
+  PORT_LOGISTICS
+  WATER
+  HEALTHCARE_SUPPLY
+  DEFENCE_SUPPLY
+  GOVERNMENT_IT
+}
+
+// Precision of a stored ownership percentage. A CALCULATED percentage is
+// derived deterministically from stated data (never guessed).
+enum OwnershipCalculationStatus {
+  REPORTED // stated by the source
+  CALCULATED // derived deterministically (e.g. share counts / ratios)
+  UNKNOWN // precision not disclosed
+}
+
+// Public-procurement procedure (Hankintalaki). Neutral — procurement is a
+// relationship, never an influence accusation.
+enum ProcurementProcedure {
+  OPEN
+  RESTRICTED
+  NEGOTIATED
+  COMPETITIVE_DIALOGUE
+  INNOVATION_PARTNERSHIP
+  DIRECT_AWARD
+  FRAMEWORK_AGREEMENT
+  OTHER
 }
 
 model Entity {
@@ -131,6 +292,15 @@ model Entity {
   identityMentionOutlets  MediaIdentityMention[]   @relation("IdentityMentionOutlet")
   identityMentionAuthors  MediaIdentityMention[]   @relation("IdentityMentionJournalist")
 
+  // Institutional power (foundation).
+  organizationSectors           OrganizationSector[] @relation("OrgSectors")
+  criticalFunctions             CriticalFunctionAssignment[] @relation("CriticalFunctions")
+  procurementAuthorityContracts ProcurementContract[] @relation("ProcurementAuthority")
+  procurementSupplierContracts  ProcurementContract[] @relation("ProcurementSupplier")
+  lobbyingEngagementsAsOrg      LobbyingEngagement[] @relation("LobbyingOrganization")
+  lobbyingTargetEngagements     LobbyingEngagement[] @relation("LobbyingTarget")
+  appointedPositions            Position[] @relation("PositionAppointedBy")
+
   @@index([canonicalName])
   @@index([type, status])
   @@index([municipality])
@@ -205,20 +375,8 @@ model ExternalIdentifier {
 
 // ---------------------------------------------------------------- media & journalism (Toimittajat & media)
 
-// Evidence grade (section 9). Independent of Confidence: this grades the
-// *source strength* of a specific claim, not the overall status.
-//   A — primary / official source
-//   B — strong journalistic or institutional source
-//   C — corroborated by several independent sources
-//   D — a single secondary source
-//   E — unverified; must never be shown as fact in the public UI
-enum EvidenceGrade {
-  A
-  B
-  C
-  D
-  E
-}
+// Evidence grade (section 9): see EvidenceGrade above (shared with
+// institutional-power foundation — same A-E source-strength scale).
 
 // Journalist role classification. Stored on Entity.subtype for PERSON entities;
 // NOT a political stance — a professional classification. The subtype sets live
@@ -904,29 +1062,39 @@ model Relationship {
   // Temporal model (B.5 Phase 4). startDate/endDate are the canonical
   // validity window (validFrom / validTo). temporalState is derived
   // deterministically at write time by src/lib/temporal.ts.
-  startDate             DateTime?          @db.Date
-  endDate               DateTime?          @db.Date
-  observedAt            DateTime? // when a source last observed this relationship
-  lastConfirmedAt       DateTime? // when a source last confirmed it still holds
-  endedReason           String?
-  temporalState         TemporalState      @default(UNKNOWN_PERIOD)
-  amount                Decimal?           @db.Decimal(18, 2)
-  currency              String?
-  percentage            Decimal?           @db.Decimal(6, 2)
-  role                  String?
-  description           String?            @db.Text
-  status                EntityStatus       @default(ACTIVE)
-  confidence            Confidence         @default(HIGH)
-  confidenceScore       Float? // 0.0-1.0; DB CHECK constraint. Not a proof of fact.
-  supportingSourceCount Int                @default(1) // distinct sources corroborating this same edge
-  evidenceStrength      String? // "single_source" | "multiple_primary" | ...
-  verificationState     VerificationState  @default(PUBLISHED)
-  verificationStatus    VerificationStatus @default(AUTO_DETECTED)
-  firstSeen             DateTime?          @default(now())
-  lastVerifiedAt        DateTime?
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-  createdBy             String? // agent name or "human"
+
+  startDate        DateTime?         @db.Date
+  endDate          DateTime?         @db.Date
+  observedAt       DateTime?         // when a source last observed this relationship
+  lastConfirmedAt  DateTime?         // when a source last confirmed it still holds
+  endedReason      String?
+  temporalState    TemporalState     @default(UNKNOWN_PERIOD)
+  amount           Decimal?          @db.Decimal(18, 2)
+  currency         String?
+  percentage       Decimal?          @db.Decimal(6, 2)
+  // Ownership semantics (institutional-power foundation). Only meaningful for
+  // the OWNS / SHAREHOLDER_OF / BENEFICIAL_OWNER_OF family. A percentage is
+  // never inferred: REPORTED from the source or CALCULATED from stated data.
+  shareClass       String?
+  votingRightsPct  Decimal?          @db.Decimal(6, 2)
+  isIndirect       Boolean           @default(false)
+  ownershipCalculationStatus OwnershipCalculationStatus?
+  // Stable per-source record key for multi-source ownership dedup.
+  externalRecordId String?           @unique
+  role             String?
+  description      String?           @db.Text
+  status           EntityStatus      @default(ACTIVE)
+  confidence       Confidence        @default(HIGH)
+  confidenceScore  Float?            // 0.0-1.0; DB CHECK constraint. Not a proof of fact.
+  supportingSourceCount Int          @default(1) // distinct sources corroborating this same edge
+  evidenceStrength String? // "single_source" | "multiple_primary" | ...
+  verificationState VerificationState @default(PUBLISHED)
+  verificationStatus VerificationStatus @default(AUTO_DETECTED)
+  firstSeen        DateTime?         @default(now())
+  lastVerifiedAt   DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  createdBy        String? // agent name or "human"
 
   evidence          Evidence[]
   changeLogs        ChangeLog[]
@@ -1240,24 +1408,40 @@ model FinancialStatementItem {
 }
 
 // ---------------------------------------------------------------- positions
+//
+// Position IS the generic temporal RoleAssignment (institutional-power
+// foundation). A person may hold many simultaneous roles; every role is dated,
+// source-backed and evidence-graded. `role` keeps the free-text title, `roleType`
+// is the machine-readable classification (never mutually exclusive).
 
 model Position {
-  id                   String    @id @default(uuid()) @db.Uuid
-  personEntityId       String    @db.Uuid
-  personEntity         Entity    @relation("PositionPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
-  organizationEntityId String?   @db.Uuid
-  organizationEntity   Entity?   @relation("PositionOrg", fields: [organizationEntityId], references: [id], onDelete: SetNull)
-  role                 String
-  startDate            DateTime? @db.Date
-  endDate              DateTime? @db.Date
-  isCurrent            Boolean   @default(true)
-  sourceId             String?   @db.Uuid
-  source               Source?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  id                 String        @id @default(uuid()) @db.Uuid
+  personEntityId     String        @db.Uuid
+  personEntity       Entity        @relation("PositionPerson", fields: [personEntityId], references: [id], onDelete: Cascade)
+  organizationEntityId String?     @db.Uuid
+  organizationEntity Entity?       @relation("PositionOrg", fields: [organizationEntityId], references: [id], onDelete: SetNull)
+  role               String
+  roleType           RoleType?
+  department         String?
+  startDate          DateTime?     @db.Date // validFrom
+  endDate            DateTime?     @db.Date // validTo
+  isCurrent          Boolean       @default(true)
+  appointmentMethod  String? // canonical values: NOMINATION | ELECTION | APPOINTMENT | OWNER_DECISION | SECONDMENT | OTHER
+  appointedByEntityId String?      @db.Uuid
+  appointedByEntity  Entity?       @relation("PositionAppointedBy", fields: [appointedByEntityId], references: [id], onDelete: SetNull)
+  sourceId           String?       @db.Uuid
+  source             Source?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  evidenceGrade      EvidenceGrade @default(C)
+  verificationStatus VerificationStatus @default(SOURCE_CONFIRMED)
+  lastVerifiedAt     DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   @@index([personEntityId])
   @@index([organizationEntityId])
+  @@index([roleType])
+  @@index([appointedByEntityId])
+  @@index([isCurrent, roleType])
 }
 
 // ---------------------------------------------------------------- decisions & votes
@@ -1379,6 +1563,12 @@ model Source {
   campaignRecipients CampaignRecipient[]
   vaikutaContacts    VaikutaContactMethod[]
   decisionStages     DecisionStage[]
+
+  // Institutional power (foundation).
+  organizationSectors         OrganizationSector[] @relation("OrgSectorSource")
+  criticalFunctionAssignments CriticalFunctionAssignment[] @relation("CriticalFunctionSource")
+  procurementContracts        ProcurementContract[] @relation("ProcurementSource")
+  lobbyingEngagements         LobbyingEngagement[] @relation("LobbyingSource")
 
   @@unique([sourceUrl])
   @@index([sourceType])
@@ -2076,4 +2266,117 @@ model DecisionStage {
 
   @@index([decisionId, date])
   @@index([stageType])
+}
+
+// ---------------------------------------------------------------- institutional power (foundation)
+//
+// OrganizationSector: neutral sector classification, multiple allowed per
+// organisation. Assigned only when a public source documents it. A sector is
+// descriptive, never an influence or risk signal.
+model OrganizationSector {
+  id           String        @id @default(uuid()) @db.Uuid
+  entityId     String        @db.Uuid
+  entity       Entity        @relation("OrgSectors", fields: [entityId], references: [id], onDelete: Cascade)
+  sector       Sector
+  sourceId     String?       @db.Uuid
+  source       Source?       @relation("OrgSectorSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  evidenceGrade EvidenceGrade @default(C)
+  validFrom    DateTime?     @db.Date
+  validTo      DateTime?     @db.Date
+  createdBy    String? // agent name or "human"
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([entityId, sector])
+  @@index([sector])
+  @@index([entityId, validTo])
+}
+
+// CriticalFunctionAssignment: a nationally significant function performed by an
+// organisation, labelled ONLY with a public basis. Never reconstructed from
+// classified infrastructure, HVK lists, emergency plans or hidden dependencies.
+model CriticalFunctionAssignment {
+  id                   String        @id @default(uuid()) @db.Uuid
+  entityId             String        @db.Uuid
+  entity               Entity        @relation("CriticalFunctions", fields: [entityId], references: [id], onDelete: Cascade)
+  function             CriticalFunction
+  classificationSource String // who classified (adapter id or "human")
+  publicBasis          String        @db.Text // the public evidence basis for the label
+  confidence           Confidence    @default(HIGH)
+  evidenceGrade        EvidenceGrade @default(C)
+  sourceId             String?       @db.Uuid
+  source               Source?       @relation("CriticalFunctionSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  createdBy            String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@unique([entityId, function, publicBasis])
+  @@index([function])
+  @@index([entityId])
+}
+
+// ProcurementContract: a documented public-procurement relationship between a
+// contracting authority and a supplier. Procurement is a RELATIONSHIP, not an
+// influence edge — the public UI labels it "Hankintasuhde", never "Vaikuttaa".
+model ProcurementContract {
+  id                            String             @id @default(uuid()) @db.Uuid
+  contractingAuthorityEntityId  String             @db.Uuid
+  contractingAuthority          Entity             @relation("ProcurementAuthority", fields: [contractingAuthorityEntityId], references: [id], onDelete: Cascade)
+  supplierEntityId              String             @db.Uuid
+  supplier                      Entity             @relation("ProcurementSupplier", fields: [supplierEntityId], references: [id], onDelete: Cascade)
+  value                         Decimal?           @db.Decimal(18, 2)
+  currency                      String             @default("EUR")
+  cpv                           String? // CPV code
+  procedure                     ProcurementProcedure?
+  publicationUrl                String?
+  awardDate                     DateTime?          @db.Date
+  noticeId                      String?
+  description                   String?            @db.Text
+  confidence                    Confidence         @default(HIGH)
+  evidenceGrade                 EvidenceGrade      @default(C)
+  verificationStatus            VerificationStatus @default(AUTO_DETECTED)
+  sourceId                      String?            @db.Uuid
+  source                        Source?            @relation("ProcurementSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  dedupeKey                     String?            @unique
+  createdBy                     String?
+  lastVerifiedAt                DateTime?
+  createdAt                     DateTime           @default(now())
+  updatedAt                     DateTime           @updatedAt
+
+  @@index([contractingAuthorityEntityId])
+  @@index([supplierEntityId])
+  @@index([cpv])
+  @@index([awardDate])
+}
+
+// LobbyingEngagement: an organisation's documented lobbying activity toward a
+// target (e.g. from a transparency register). Lobbying is NEVER transformed into
+// corruption or political alignment — it is recorded as a neutral, source-backed
+// relationship with reported financial resources where available.
+model LobbyingEngagement {
+  id                         String             @id @default(uuid()) @db.Uuid
+  organizationEntityId       String             @db.Uuid
+  organization               Entity             @relation("LobbyingOrganization", fields: [organizationEntityId], references: [id], onDelete: Cascade)
+  targetEntityId             String             @db.Uuid
+  target                     Entity             @relation("LobbyingTarget", fields: [targetEntityId], references: [id], onDelete: Cascade)
+  subject                    String?            @db.Text
+  communicationMethod        String?
+  periodStart                DateTime?          @db.Date
+  periodEnd                  DateTime?          @db.Date
+  reportedFinancialResources Decimal?           @db.Decimal(18, 2)
+  currency                   String?
+  confidence                 Confidence         @default(HIGH)
+  evidenceGrade              EvidenceGrade      @default(C)
+  verificationStatus         VerificationStatus @default(AUTO_DETECTED)
+  sourceId                   String?            @db.Uuid
+  source                     Source?            @relation("LobbyingSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  dedupeKey                  String?            @unique
+  createdBy                  String?
+  lastVerifiedAt             DateTime?
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+
+  @@index([organizationEntityId])
+  @@index([targetEntityId])
+  @@index([periodStart])
 }

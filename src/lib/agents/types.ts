@@ -1,4 +1,4 @@
-import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, BenefitEventType, ValuePrecision } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, BenefitEventType, ValuePrecision, RoleType, Sector, CriticalFunction, ProcurementProcedure } from "@prisma/client";
 
 /** Optional project a financial flow funds (Sprint C2). */
 export interface ProjectRef {
@@ -66,11 +66,163 @@ export interface NormalizedFact {
   ownershipPercent?: number;
 }
 
-// ---------------------------------------------------------------- benefit events & financial statements
+/** A fact proposed by an agent, ready for verification + publication. */
+export interface ProposedFact {
+  kind: "relationship" | "flow";
+  source: EntityRef;
+  target: EntityRef;
+  relationshipType?: RelationshipType;
+  flowType?: FlowType;
+  role?: string | null;
+  amount?: number | null;
+  currency?: string;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+  periodYear?: number | null;
+  purpose?: string | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  /** How the fact was extracted. "llm" and non-official sources route to the
+   *  RelationshipCandidate lane instead of publishing directly. */
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  sourceDocumentId?: string | null;
+  /** Source explicitly asserts a present-day active role. */
+  assertedCurrent?: boolean;
+  // Sprint C2 — foreign funding / project.
+  externalRecordId?: string;
+  rawFundingType?: string | null;
+  fundingType?: FundingType;
+  funderCountryCode?: string | null;
+  recipientCountryCode?: string | null;
+  projectRef?: ProjectRef;
+  /** Ownership / shareholding percentage (0-100), for OWNS-family relationships. */
+  ownershipPercent?: number;
+}
+
+// ---------------------------------------------------------------- institutional power facts (foundation)
 //
-// Public media finance (sections 3 & 6): benefit/gift/award/hospitality events
-// and year-by-year financial-statement line items are first-class facts that
-// the ingestion pipeline can propose alongside relationships and flows.
+// First-class, source-backed facts the ingestion pipeline can propose for the
+// institutional-power expansion. Every fact requires an evidence URL and
+// resolves entities through the shared entity-resolution interface.
+
+/** A person's documented role in an organisation (a RoleAssignment). */
+export interface RoleAssignmentFact {
+  kind: "role";
+  person: EntityRef;
+  organization?: EntityRef | null;
+  /** Free-text role title as documented by the source. */
+  role: string;
+  roleType?: RoleType | null;
+  department?: string | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  /** Canonical values: NOMINATION | ELECTION | APPOINTMENT | OWNER_DECISION | SECONDMENT | OTHER */
+  appointmentMethod?: string | null;
+  appointedBy?: EntityRef | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+  /** Source explicitly asserts a present-day active role. */
+  assertedCurrent?: boolean;
+}
+
+/** A neutral sector classification for an organisation (multiple allowed). */
+export interface OrganizationSectorFact {
+  kind: "sector";
+  organization: EntityRef;
+  sector: Sector;
+  validFrom?: Date | null;
+  validTo?: Date | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** A critical-function classification, only with a public evidence basis. */
+export interface CriticalFunctionFact {
+  kind: "critical-function";
+  organization: EntityRef;
+  function: CriticalFunction;
+  /** Who classified (adapter id or "human"). */
+  classificationSource: string;
+  /** The public evidence basis for the label. */
+  publicBasis: string;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** A documented public-procurement relationship (authority → supplier). */
+export interface ProcurementFact {
+  kind: "procurement";
+  contractingAuthority: EntityRef;
+  supplier: EntityRef;
+  value?: number | null;
+  currency?: string;
+  cpv?: string | null;
+  procedure?: ProcurementProcedure | null;
+  publicationUrl?: string | null;
+  awardDate?: Date | null;
+  noticeId?: string | null;
+  description?: string | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** A documented lobbying engagement (organisation → target). */
+export interface LobbyingFact {
+  kind: "lobbying";
+  organization: EntityRef;
+  target: EntityRef;
+  subject?: string | null;
+  communicationMethod?: string | null;
+  periodStart?: Date | null;
+  periodEnd?: Date | null;
+  reportedFinancialResources?: number | null;
+  currency?: string | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
 
 /** A proposed, source-backed benefit event (gift / award / honour / portrait / ...). */
 export interface BenefitEventFact {
@@ -140,47 +292,15 @@ export interface StatementItemFact {
 }
 
 /** Every fact kind an adapter may propose. */
-export type AgentFact = NormalizedFact | BenefitEventFact | StatementItemFact;
-
-/** A fact proposed by an agent, ready for verification + publication. */
-export interface ProposedFact {
-  kind: "relationship" | "flow";
-  source: EntityRef;
-  target: EntityRef;
-  relationshipType?: RelationshipType;
-  flowType?: FlowType;
-  role?: string | null;
-  amount?: number | null;
-  currency?: string;
-  startDate?: Date | null;
-  endDate?: Date | null;
-  periodStart?: Date | null;
-  periodEnd?: Date | null;
-  periodYear?: number | null;
-  purpose?: string | null;
-  confidence: Confidence;
-  evidenceUrl: string;
-  evidenceTitle?: string | null;
-  sourceType: SourceType;
-  sourceName: string;
-  publisher: string;
-  /** How the fact was extracted. "llm" and non-official sources route to the
-   *  RelationshipCandidate lane instead of publishing directly. */
-  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
-  extractorVersion?: string;
-  sourceDocumentId?: string | null;
-  /** Source explicitly asserts a present-day active role. */
-  assertedCurrent?: boolean;
-  // Sprint C2 — foreign funding / project.
-  externalRecordId?: string;
-  rawFundingType?: string | null;
-  fundingType?: FundingType;
-  funderCountryCode?: string | null;
-  recipientCountryCode?: string | null;
-  projectRef?: ProjectRef;
-  /** Ownership / shareholding percentage (0-100), for OWNS-family relationships. */
-  ownershipPercent?: number;
-}
+export type AgentFact =
+  | NormalizedFact
+  | BenefitEventFact
+  | StatementItemFact
+  | RoleAssignmentFact
+  | OrganizationSectorFact
+  | CriticalFunctionFact
+  | ProcurementFact
+  | LobbyingFact;
 
 /** Reference to an entity that must be resolved (never merged on name alone). */
 export interface EntityRef {

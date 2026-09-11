@@ -4,8 +4,8 @@
 // Direct prisma.relationship.create / financialFlow.create inside agents is forbidden
 // by design; adapters must route writes through this module.
 
-import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, Confidence, EntityStatus } from "@prisma/client";
-import type { RunContext, ProposedFact, BenefitEventFact, StatementItemFact, EntityRef } from "./types";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, Confidence, EntityStatus, VerificationStatus } from "@prisma/client";
+import type { RunContext, ProposedFact, RoleAssignmentFact, OrganizationSectorFact, CriticalFunctionFact, ProcurementFact, LobbyingFact, EntityRef, BenefitEventFact, StatementItemFact } from "./types";
 import { resolveEntity } from "./entityResolution";
 import { confidenceToScore, deriveAgentStatus } from "@/lib/verification";
 import { deriveTemporalState } from "@/lib/temporal";
@@ -399,8 +399,386 @@ async function upsertRelationship(
       occurredAt: new Date(),
     },
   });
-  ctx.stats.created++;
+ctx.stats.created++;
   return "created";
+}
+
+// ---------------------------------------------------------------------------
+// Institutional-power publication (foundation): roles, sectors, critical
+// functions, procurement, lobbying.
+//
+// Publication policy — mirrors the verified-fact lane:
+//   deterministic-parser extraction from an official/strong source with
+//   VERIFIED/HIGH confidence  → SOURCE_CONFIRMED (publishable).
+//   everything else           → AUTO_DETECTED (stored, but never shown as a
+//                               confirmed connection until a reviewer accepts).
+// No AI model may turn speculation into a published institutional fact. Every
+// row requires an evidence URL and resolved entities.
+// ---------------------------------------------------------------------------
+
+export type InstitutionalPublicationResult =
+  | { action: "created" | "updated" | "unchanged" | "rejected"; reason?: string }
+  | { action: "review" };
+
+function institutionalAutoPublish(
+  method: string | undefined,
+  sourceType: SourceType,
+  confidence: Confidence,
+): boolean {
+  return (method ?? "deterministic-parser") === "deterministic-parser" &&
+    deriveAgentStatus({ sourceType, confidence }) === "SOURCE_CONFIRMED";
+}
+
+async function resolveOptionalEntity(db: PrismaClient, ref: EntityRef | null | undefined): Promise<{ id: string | null; blocker?: string }> {
+  if (!ref) return { id: null };
+  const out = await resolveEntity(db, ref);
+  if (out.status === "matched") return { id: out.entityId };
+  if (out.status === "unresolved") return { id: null, blocker: `unresolved entity (candidate ${out.candidateId})` };
+  return { id: null, blocker: out.reason };
+}
+
+async function resolveRequiredEntity(db: PrismaClient, ref: EntityRef): Promise<{ id: string; blocker?: string }> {
+  const out = await resolveEntity(db, ref);
+  if (out.status === "matched") return { id: out.entityId };
+  if (out.status === "unresolved") return { id: "", blocker: `unresolved entity (candidate ${out.candidateId})` };
+  return { id: "", blocker: out.reason };
+}
+
+function institutionalSource(ctx: RunContext, fact: {
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+}) {
+  return ensureSource(ctx.db, {
+    url: fact.evidenceUrl,
+    name: fact.sourceName,
+    publisher: fact.publisher,
+    sourceType: fact.sourceType,
+    documentTitle: fact.evidenceTitle ?? null,
+  });
+}
+
+function reject(ctx: RunContext, reason: string): InstitutionalPublicationResult {
+  ctx.stats.rejected++;
+  return { action: "rejected", reason };
+}
+
+// ---------------------------------------------------------------- role assignment (Position)
+
+export async function publishRoleAssignment(ctx: RunContext, fact: RoleAssignmentFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.person?.name || !fact.role || !fact.role.trim()) return reject(ctx, "role without person or role title");
+  if (!fact.evidenceUrl) return reject(ctx, "role without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+
+  const person = await resolveRequiredEntity(ctx.db, fact.person);
+  if (person.blocker) return reject(ctx, `person ${person.blocker}`);
+  const org = await resolveOptionalEntity(ctx.db, fact.organization);
+  if (org.blocker) return reject(ctx, `organization ${org.blocker}`);
+  const appoint = await resolveOptionalEntity(ctx.db, fact.appointedBy);
+  if (appoint.blocker) return reject(ctx, `appointedBy ${appoint.blocker}`);
+
+  const source = await institutionalSource(ctx, fact);
+  const autoPublish = institutionalAutoPublish(fact.extractionMethod, fact.sourceType, fact.confidence);
+  const verificationStatus: VerificationStatus = autoPublish
+    ? deriveAgentStatus({ sourceType: fact.sourceType, confidence: fact.confidence })
+    : "AUTO_DETECTED";
+
+  const today = new Date();
+  const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  let isCurrent = true;
+  if (fact.endDate && fact.endDate < start) isCurrent = false;
+  else if (fact.startDate && fact.startDate > start) isCurrent = false;
+  else if (fact.assertedCurrent === false) isCurrent = false;
+
+  const dup = await ctx.db.position.findFirst({
+    where: {
+      personEntityId: person.id,
+      organizationEntityId: org.id ?? null,
+      role: fact.role.trim(),
+      roleType: fact.roleType ?? undefined,
+      startDate: fact.startDate ?? null,
+    },
+  });
+  if (dup) {
+    const changed =
+      (dup.endDate?.getTime() ?? null) !== (fact.endDate?.getTime() ?? null) ||
+      dup.isCurrent !== isCurrent ||
+      dup.verificationStatus !== verificationStatus;
+    if (!changed) {
+      await ctx.db.position.update({ where: { id: dup.id }, data: { lastVerifiedAt: new Date() } });
+      ctx.stats.updated++;
+      return autoPublish ? { action: "unchanged" } : { action: "review" };
+    }
+    await ctx.db.position.update({
+      where: { id: dup.id },
+      data: { endDate: fact.endDate ?? null, isCurrent, verificationStatus, lastVerifiedAt: new Date(), updatedAt: new Date() },
+    });
+    ctx.stats.updated++;
+    return autoPublish ? { action: "updated" } : { action: "review" };
+  }
+
+  await ctx.db.position.create({
+    data: {
+      personEntityId: person.id,
+      organizationEntityId: org.id,
+      role: fact.role.trim(),
+      roleType: fact.roleType ?? null,
+      department: fact.department ?? null,
+      startDate: fact.startDate ?? null,
+      endDate: fact.endDate ?? null,
+      isCurrent,
+      appointmentMethod: fact.appointmentMethod ?? null,
+      appointedByEntityId: appoint.id,
+      sourceId: source.id,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      verificationStatus,
+      lastVerifiedAt: new Date(),
+    },
+  });
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created" };
+  }
+  ctx.stats.candidates++;
+  return { action: "review" };
+}
+
+// ---------------------------------------------------------------- organisation sector
+
+export async function publishOrganizationSector(ctx: RunContext, fact: OrganizationSectorFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.organization?.name) return reject(ctx, "sector without organisation");
+  if (!fact.evidenceUrl) return reject(ctx, "sector without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+
+  const org = await resolveRequiredEntity(ctx.db, fact.organization);
+  if (org.blocker) return reject(ctx, `organization ${org.blocker}`);
+  const source = await institutionalSource(ctx, fact);
+  const autoPublish = institutionalAutoPublish(fact.extractionMethod, fact.sourceType, fact.confidence);
+
+  const existing = await ctx.db.organizationSector.findUnique({
+    where: { entityId_sector: { entityId: org.id, sector: fact.sector } },
+  });
+  if (existing) {
+    const changed = (existing.validTo?.getTime() ?? null) !== (fact.validTo?.getTime() ?? null);
+    if (!changed) {
+      await ctx.db.organizationSector.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+      ctx.stats.updated++;
+      return autoPublish ? { action: "unchanged" } : { action: "review" };
+    }
+    await ctx.db.organizationSector.update({
+      where: { id: existing.id },
+      data: { validTo: fact.validTo ?? null, updatedAt: new Date() },
+    });
+    ctx.stats.updated++;
+    return autoPublish ? { action: "updated" } : { action: "review" };
+  }
+
+  await ctx.db.organizationSector.create({
+    data: {
+      entityId: org.id,
+      sector: fact.sector,
+      sourceId: source.id,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      validFrom: fact.validFrom ?? null,
+      validTo: fact.validTo ?? null,
+      createdBy: ctx.agentId,
+    },
+  });
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created" };
+  }
+  ctx.stats.candidates++;
+  return { action: "review" };
+}
+
+// ---------------------------------------------------------------- critical function
+
+export async function publishCriticalFunction(ctx: RunContext, fact: CriticalFunctionFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.organization?.name) return reject(ctx, "critical-function without organisation");
+  if (!fact.publicBasis?.trim()) return reject(ctx, "critical-function without a public basis");
+  if (!fact.evidenceUrl) return reject(ctx, "critical-function without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+
+  const org = await resolveRequiredEntity(ctx.db, fact.organization);
+  if (org.blocker) return reject(ctx, `organization ${org.blocker}`);
+  const source = await institutionalSource(ctx, fact);
+  const autoPublish = institutionalAutoPublish(fact.extractionMethod, fact.sourceType, fact.confidence);
+
+  const existing = await ctx.db.criticalFunctionAssignment.findUnique({
+    where: { entityId_function_publicBasis: { entityId: org.id, function: fact.function, publicBasis: fact.publicBasis.trim() } },
+  });
+  if (existing) {
+    await ctx.db.criticalFunctionAssignment.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+    ctx.stats.updated++;
+    return autoPublish ? { action: "unchanged" } : { action: "review" };
+  }
+
+  await ctx.db.criticalFunctionAssignment.create({
+    data: {
+      entityId: org.id,
+      function: fact.function,
+      classificationSource: fact.classificationSource ?? ctx.agentId,
+      publicBasis: fact.publicBasis.trim(),
+      confidence: fact.confidence,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      sourceId: source.id,
+      createdBy: ctx.agentId,
+    },
+  });
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created" };
+  }
+  ctx.stats.candidates++;
+  return { action: "review" };
+}
+
+// ---------------------------------------------------------------- procurement
+
+export async function publishProcurement(ctx: RunContext, fact: ProcurementFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.contractingAuthority?.name || !fact.supplier?.name) return reject(ctx, "procurement without both parties");
+  if (!fact.evidenceUrl) return reject(ctx, "procurement without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+  if (fact.value !== null && fact.value !== undefined) {
+    if (!Number.isFinite(fact.value) || Math.abs(fact.value) > MAX_AMOUNT) return reject(ctx, "procurement value out of bounds");
+    if (!fact.currency) return reject(ctx, "procurement value without currency");
+  }
+
+  const authority = await resolveRequiredEntity(ctx.db, fact.contractingAuthority);
+  if (authority.blocker) return reject(ctx, `contracting authority ${authority.blocker}`);
+  const supplier = await resolveRequiredEntity(ctx.db, fact.supplier);
+  if (supplier.blocker) return reject(ctx, `supplier ${supplier.blocker}`);
+  if (authority.id === supplier.id) return reject(ctx, "procurement between identical entities not allowed");
+
+  const source = await institutionalSource(ctx, fact);
+  const autoPublish = institutionalAutoPublish(fact.extractionMethod, fact.sourceType, fact.confidence);
+  const verificationStatus: VerificationStatus = autoPublish
+    ? deriveAgentStatus({ sourceType: fact.sourceType, confidence: fact.confidence })
+    : "AUTO_DETECTED";
+
+  const existing = fact.dedupeKey
+    ? await ctx.db.procurementContract.findUnique({ where: { dedupeKey: fact.dedupeKey } })
+    : await ctx.db.procurementContract.findFirst({
+        where: {
+          contractingAuthorityEntityId: authority.id,
+          supplierEntityId: supplier.id,
+          noticeId: fact.noticeId ?? null,
+          awardDate: fact.awardDate ?? null,
+        },
+      });
+  if (existing) {
+    const changed =
+      Number(existing.value ?? 0) !== (fact.value ?? 0) ||
+      (existing.verificationStatus ?? null) !== verificationStatus;
+    if (!changed) {
+      await ctx.db.procurementContract.update({ where: { id: existing.id }, data: { lastVerifiedAt: new Date() } });
+      ctx.stats.updated++;
+      return autoPublish ? { action: "unchanged" } : { action: "review" };
+    }
+    await ctx.db.procurementContract.update({
+      where: { id: existing.id },
+      data: { value: fact.value ?? null, verificationStatus, lastVerifiedAt: new Date() },
+    });
+    ctx.stats.updated++;
+    return autoPublish ? { action: "updated" } : { action: "review" };
+  }
+
+  await ctx.db.procurementContract.create({
+    data: {
+      contractingAuthorityEntityId: authority.id,
+      supplierEntityId: supplier.id,
+      value: fact.value ?? null,
+      currency: fact.currency ?? "EUR",
+      cpv: fact.cpv ?? null,
+      procedure: fact.procedure ?? null,
+      publicationUrl: fact.publicationUrl ?? null,
+      awardDate: fact.awardDate ?? null,
+      noticeId: fact.noticeId ?? null,
+      description: fact.description ?? null,
+      confidence: fact.confidence,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      verificationStatus,
+      sourceId: source.id,
+      dedupeKey: fact.dedupeKey ?? null,
+      createdBy: ctx.agentId,
+      lastVerifiedAt: new Date(),
+    },
+  });
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created" };
+  }
+  ctx.stats.candidates++;
+  return { action: "review" };
+}
+
+// ---------------------------------------------------------------- lobbying
+
+export async function publishLobbying(ctx: RunContext, fact: LobbyingFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.organization?.name || !fact.target?.name) return reject(ctx, "lobbying without both parties");
+  if (!fact.evidenceUrl) return reject(ctx, "lobbying without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+  if (fact.reportedFinancialResources !== null && fact.reportedFinancialResources !== undefined) {
+    if (!Number.isFinite(fact.reportedFinancialResources) || Math.abs(fact.reportedFinancialResources) > MAX_AMOUNT)
+      return reject(ctx, "lobbying resources out of bounds");
+  }
+
+  const org = await resolveRequiredEntity(ctx.db, fact.organization);
+  if (org.blocker) return reject(ctx, `organization ${org.blocker}`);
+  const target = await resolveRequiredEntity(ctx.db, fact.target);
+  if (target.blocker) return reject(ctx, `target ${target.blocker}`);
+  if (org.id === target.id) return reject(ctx, "lobbying between identical entities not allowed");
+
+  const source = await institutionalSource(ctx, fact);
+  const autoPublish = institutionalAutoPublish(fact.extractionMethod, fact.sourceType, fact.confidence);
+  const verificationStatus: VerificationStatus = autoPublish
+    ? deriveAgentStatus({ sourceType: fact.sourceType, confidence: fact.confidence })
+    : "AUTO_DETECTED";
+
+  const existing = fact.dedupeKey
+    ? await ctx.db.lobbyingEngagement.findUnique({ where: { dedupeKey: fact.dedupeKey } })
+    : await ctx.db.lobbyingEngagement.findFirst({
+        where: {
+          organizationEntityId: org.id,
+          targetEntityId: target.id,
+          periodStart: fact.periodStart ?? null,
+          subject: fact.subject ?? null,
+        },
+      });
+  if (existing) {
+    await ctx.db.lobbyingEngagement.update({ where: { id: existing.id }, data: { lastVerifiedAt: new Date() } });
+    ctx.stats.updated++;
+    return autoPublish ? { action: "unchanged" } : { action: "review" };
+  }
+
+  await ctx.db.lobbyingEngagement.create({
+    data: {
+      organizationEntityId: org.id,
+      targetEntityId: target.id,
+      subject: fact.subject ?? null,
+      communicationMethod: fact.communicationMethod ?? null,
+      periodStart: fact.periodStart ?? null,
+      periodEnd: fact.periodEnd ?? null,
+      reportedFinancialResources: fact.reportedFinancialResources ?? null,
+      currency: fact.currency ?? null,
+      confidence: fact.confidence,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      verificationStatus,
+      sourceId: source.id,
+      dedupeKey: fact.dedupeKey ?? null,
+      createdBy: ctx.agentId,
+      lastVerifiedAt: new Date(),
+    },
+  });
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created" };
+  }
+  ctx.stats.candidates++;
+  return { action: "review" };
 }
 
 async function upsertFlow(

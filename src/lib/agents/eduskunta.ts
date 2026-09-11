@@ -280,6 +280,7 @@ export const eduskuntaAdapter: SourceAdapter = {
     // Only relationship facts carry the profile metadata this hook consumes.
     if (fact.kind !== "relationship") return;
     if (!entityIds.source) return;
+    if (fact.kind !== "relationship") return; // institutional-power facts have their own profile hooks
     const profile = fact.sourceProfile as Record<string, unknown> | undefined;
     if (!profile) return;
 
