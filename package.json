@@ -46,6 +46,7 @@
     "@axe-core/playwright": "^4.13.0",
     "@eslint/eslintrc": "^3.3.6",
     "@playwright/test": "^1.62.1",
+    "@axe-core/playwright": "^4.13.0",
     "@types/cytoscape": "^3.21.8",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",

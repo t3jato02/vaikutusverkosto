@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import "dotenv/config";
 import { sidonnaisuudetAdapter } from "@/lib/agents/sidonnaisuudet";
-import type { RunContext } from "@/lib/agents/types";
+import type { RunContext, NormalizedFact } from "@/lib/agents/types";
 
 const ctx = { log: () => {}, stats: {} } as unknown as RunContext;
 
@@ -18,7 +18,7 @@ const doc = {
 
 describe("sidonnaisuudet rule extraction (B.5 Phase 6)", () => {
   it("emits rule-based candidates only for clearly-parseable board/council roles", async () => {
-    const facts = await sidonnaisuudetAdapter.parse(
+const facts = (await sidonnaisuudetAdapter.parse(
       ctx,
       doc,
       detail([
@@ -27,8 +27,8 @@ describe("sidonnaisuudet rule extraction (B.5 Phase 6)", () => {
         { RyhmaOtsikko: "Palkatut toimet", Sidonta: "Ei ilmoitettavia sidonnaisuuksia" },
         { RyhmaOtsikko: "Muut sidonnaisuudet", Sidonta: "-" },
         { RyhmaOtsikko: "Ammatin harjoittaminen", Sidonta: "Toimin freelancer-toimittajana." },
-      ]),
-    );
+]),
+    )) as NormalizedFact[];
     expect(facts.length).toBe(2);
     expect(facts.every((f) => f.extractionMethod === "rule")).toBe(true);
     expect(facts.every((f) => f.confidence === "MEDIUM")).toBe(true);
