@@ -111,5 +111,5 @@ Never bypass `publish.ts` to write public facts.
 - [x] `docs/institutional-power/ARCHITECTURE.md` + this contract
 - [x] Foundation tests green (unit + DB)
 - [x] `npm run typecheck` and `npm run lint` green
-- [ ] `INTEGRATION_BASE_SHA` and `FOUNDATION_READY_SHA` recorded (top of this file) at commit
+- [x] `INTEGRATION_BASE_SHA` and `FOUNDATION_READY_SHA` recorded (top of this file) — `91e6493`
 - [ ] **Do NOT deploy.** The final integrator deploys the expansion.
