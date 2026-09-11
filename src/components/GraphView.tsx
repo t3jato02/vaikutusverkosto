@@ -440,7 +440,8 @@ function NodeDetail({
         : null;
   const v = edge ? verificationLabel(edge.verificationStatus) : null;
   return (
-    <dl className="text-sm">
+    <>
+      <dl className="text-sm">
       <Row label="Tyyppi">{typeFi(node.type)}</Row>
       {rel && (
         <Row label={`Suhde kohteeseen ${centerLabel}`}>
@@ -464,15 +465,16 @@ function NodeDetail({
       )}
       {edge?.sourceUrl && (
         <Row label="Lähde">
-          <a href={edge.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+          <a href={edge.sourceUrl} target="_blank" rel="noreferrer" className="text-accent underline">
             {edge.sourceName || "Avaa lähde"}
           </a>
         </Row>
       )}
+      </dl>
       <Link href={`/entity/${node.id}`} className="btn-primary mt-4 w-full">
         Avaa profiili
       </Link>
-    </dl>
+    </>
   );
 }
 

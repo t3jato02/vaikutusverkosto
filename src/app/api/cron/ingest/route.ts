@@ -13,7 +13,10 @@ import { syncRegistry } from "@/lib/agents/sourceRegistry";
 import { dueSources, runOptionsFor } from "@/lib/agents/scheduler";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120; // stay within Vercel limits; heavy work is chunked
+// Heavy adapters (EU FTS: two ~20 MB XLSX downloads + stream parse in `discover`)
+// need more than the old 120 s. 300 s is the Vercel ceiling on the current plan;
+// per-source work is still chunked (`maxDocsPerTick`) and resumable across ticks.
+export const maxDuration = 300;
 
 export async function GET() {
   return runTick();

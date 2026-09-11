@@ -54,7 +54,13 @@ export async function dueSources(
   );
 
   const due = rows.filter((r) => runningIds.has(r.id) || isDue(r, now.getTime()));
-  return due.slice(0, MAX_SOURCES_PER_TICK).map((r) => r.id);
+  // RUNNING (paused, resumable) sources go first regardless of lastCheckedAt
+  // order — otherwise a source with several other stale-but-due sources ahead
+  // of it in the oldest-checked ordering can lose the per-tick slot race every
+  // single tick and never finish (finish in-progress work before starting new).
+  const running = due.filter((r) => runningIds.has(r.id));
+  const rest = due.filter((r) => !runningIds.has(r.id));
+  return [...running, ...rest].slice(0, MAX_SOURCES_PER_TICK).map((r) => r.id);
 }
 
 /** Per-source run tuning. Conservative defaults keep each tick inside the budget. */
@@ -69,8 +75,15 @@ export function runOptionsFor(sourceId: string): { concurrency: number; maxDocsP
     case "eu-transparency-register":
       return { concurrency: 4, maxDocsPerTick: 40 };
     case "eu-fts-agent":
-      // Records are pre-gathered in discovery; publishing is the cost.
-      return { concurrency: 3, maxDocsPerTick: 200 };
+      // Discovery persists a resumable descriptor cache (no per-tick re-download),
+      // so a tick's cost is collect()+publish() of this many docs. Measured on
+      // production: collect() ~0.4 s/doc, publish() of a changed doc ~5-7 s
+      // (real network latency to the DB, far above local dev). 400 blew the
+      // 300 s budget mid-publish; a timed-out tick also leaves the source's
+      // lock held for up to MAX_RUN_MINUTES, stalling the NEXT tick too. Small
+      // enough to reliably finish (clears the lock + advances the resume
+      // cursor every tick) beats a large batch that times out.
+      return { concurrency: 3, maxDocsPerTick: 60 };
     case "yle-agent":
       return { concurrency: 2, maxDocsPerTick: 6 };
     case "award-agent":

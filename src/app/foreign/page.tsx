@@ -7,7 +7,8 @@ import { foreignFundingOverview, buildForeignFundingWhere, type ForeignFundingFi
 import { FLOW_TYPE_LABELS, FUNDING_TYPE_LABELS, fundingTypeLabel, flowLabel } from "@/lib/constants";
 import { verificationLabel } from "@/lib/labels";
 import { formatDateLong } from "@/lib/format";
-import ForeignFlowGraph from "@/components/ForeignFlowGraph";
+import ForeignFlowGraph from "@/components/LazyForeignFlowGraph";
+import FilterBar from "@/components/FilterBar";
 
 export const metadata: Metadata = {
   title: "Kansainväliset yhteydet",
@@ -42,8 +43,13 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
     },
   });
 
+  const yearSuffix = overview.yearMin
+    ? overview.yearMin === overview.yearMax
+      ? ` ${overview.yearMin}`
+      : ` ${overview.yearMin}–${overview.yearMax}`
+    : "";
   const cards = [
-    { label: "Dokumentoitu rahoitus", value: formatEur(overview.totalAmount) },
+    { label: `Dokumentoitu rahoitus${yearSuffix}`, value: formatEur(overview.totalAmount) },
     { label: "Rahavirtoja", value: overview.flowCount },
     { label: "Maita", value: overview.countryCount },
     { label: "Vastaanottajia", value: overview.topRecipients.length },
@@ -51,14 +57,16 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-8">
-      <header>
+      <header className="max-w-2xl">
         <h1 className="text-page-title">Kansainväliset yhteydet</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
-          Dokumentoitu <strong>ulkomainen rahoitus</strong>, omistus ja organisaatiosuhteet. Sama
-          evidenssistandardi koskee kaikkia maita ja organisaatioita. Henkilön kansallisuus, etninen
-          tausta tai uskonto ei itsessään ole vaikuttamissuhde eikä riskisignaali — merkitystä on
-          vain dokumentoidulla rahoituksella, omistuksella, tehtävällä, sopimuksella tai päätöksellä.{" "}
-          <Link href="/methodology" className="text-accent hover:underline">Menetelmät</Link>.
+        <p className="mt-2 text-sm text-muted">
+          <strong>Vain rajat ylittävät</strong> dokumentoidut rahavirrat ja yhteydet — ne, joissa
+          rahoittajan tai omistajan maa ei ole Suomi. Kaikki rahavirrat (myös kotimaiset hankinnat
+          ja avustukset):{" "}
+          <Link href="/money" className="text-accent hover:underline">Raha</Link>. Sama
+          evidenssistandardi koskee kaikkia maita; henkilön kansallisuus, etninen tausta tai uskonto
+          ei itsessään ole vaikuttamissuhde eikä riskisignaali.{" "}
+          <Link href="/methodology#international-funding" className="text-accent hover:underline">Menetelmät</Link>.
         </p>
       </header>
 
@@ -71,31 +79,57 @@ export default async function ForeignPage({ searchParams }: { searchParams: Prom
             </div>
           ))}
         </div>
+        {overview.flowCount > 0 && (
+          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
+            {overview.yearMin && (
+              <span>
+                Vuodet{" "}
+                {overview.yearMin === overview.yearMax
+                  ? overview.yearMin
+                  : `${overview.yearMin}–${overview.yearMax}`}
+              </span>
+            )}
+            <span>
+              {(() => {
+                const confirmed = overview.byStatus
+                  .filter((s) => s.verificationStatus === "SOURCE_CONFIRMED" || s.verificationStatus === "HUMAN_VERIFIED")
+                  .reduce((n, s) => n + s._count._all, 0);
+                return confirmed === overview.flowCount
+                  ? "Kaikki vahvistettu lähteestä"
+                  : `${confirmed}/${overview.flowCount} vahvistettu lähteestä`;
+              })()}
+            </span>
+            {overview.lastUpdated && <span>Päivitetty {formatDateLong(overview.lastUpdated)}</span>}
+            <Link href="/sources" className="text-accent hover:underline">Lähteet →</Link>
+          </p>
+        )}
       </section>
 
-      <form className="card flex flex-wrap items-end gap-3 text-sm" method="get">
-        <label className="block">
-          <span className="label mb-1 block text-xs">Maa</span>
-          <select name="country" defaultValue={sp.country ?? ""} className="input h-8 py-0">
-            <option value="">Kaikki</option>
-            {overview.countries.map((c) => (
-              <option key={c.iso2} value={c.iso2}>{c.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="label mb-1 block text-xs">Rahoitustyyppi</span>
-          <select name="fundingType" defaultValue={sp.fundingType ?? ""} className="input h-8 py-0">
-            <option value="">Kaikki</option>
-            {FUNDING_TYPES.map((t) => <option key={t} value={t}>{fundingTypeLabel(t)}</option>)}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5 text-xs">
-          <input type="checkbox" name="verifiedOnly" value="true" defaultChecked={sp.verifiedOnly !== "false"} />
-          Näytä vain vahvistetut yhteydet
-        </label>
-        <button type="submit" className="btn text-xs">Suodata</button>
-      </form>
+      <FilterBar activeCount={[sp.country, sp.fundingType, sp.minAmount].filter(Boolean).length}>
+        <form className="card flex flex-col gap-3 text-sm sm:flex-row sm:flex-wrap sm:items-end" method="get">
+          <label className="block">
+            <span className="label mb-1 block text-xs">Maa</span>
+            <select name="country" defaultValue={sp.country ?? ""} className="input h-9 py-0 sm:h-8">
+              <option value="">Kaikki</option>
+              {overview.countries.map((c) => (
+                <option key={c.iso2} value={c.iso2}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="label mb-1 block text-xs">Rahoitustyyppi</span>
+            <select name="fundingType" defaultValue={sp.fundingType ?? ""} className="input h-9 py-0 sm:h-8">
+              <option value="">Kaikki</option>
+              {FUNDING_TYPES.map((t) => <option key={t} value={t}>{fundingTypeLabel(t)}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-xs">
+            <input type="checkbox" name="verifiedOnly" value="true" defaultChecked={sp.verifiedOnly !== "false"} className="accent-accent" />
+            Näytä vain vahvistetut yhteydet
+          </label>
+          <button type="submit" className="btn-primary text-xs">Suodata</button>
+        </form>
+      </FilterBar>
 
       <section aria-label="Rahoitus maittain">
         <h2 className="section-title mb-2">Rahoitus maittain</h2>

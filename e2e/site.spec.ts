@@ -1,5 +1,16 @@
 import { test, expect } from "@playwright/test";
 
+// WebKit (unlike Chromium) refuses `Secure` cookies over plain http://localhost,
+// so the session-cookie login flow can't complete against a local production
+// build served over HTTP. It works on real Safari over HTTPS (production). Skip
+// only that specific combination.
+function skipWebkitHttpAuth(browserName: string, baseURL: string | undefined) {
+  test.skip(
+    browserName === "webkit" && !(baseURL ?? "").startsWith("https"),
+    "WebKit drops Secure session cookies over http://localhost",
+  );
+}
+
 test.describe("public navigation", () => {
   test("home loads and shows purpose + real stats", async ({ page }) => {
     const errors: string[] = [];
@@ -59,12 +70,12 @@ test.describe("media & journalists", () => {
   test("media hub loads with non-accusatory copy", async ({ page }) => {
     await page.goto("/media");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await expect(page.getByText(/Ketkä kirjoittavat vallankäyttäjistä/i)).toBeVisible();
+    await expect(page.getByText(/Ketkä kirjoittavat vallankäyttäjistä/)).toBeVisible();
   });
 
   test("journalist index lists profiles and filters", async ({ page }) => {
     await page.goto("/toimittajat");
-    await expect(page.getByRole("heading", { name: /TOIMITTAJAT/ }).first()).toBeVisible();
+    await expect(page.getByText("TOIMITTAJAT")).toBeVisible();
     await expect(page.getByRole("link", { name: /Mikael Shepelenko/ }).first()).toBeVisible();
   });
 
@@ -77,7 +88,7 @@ test.describe("media & journalists", () => {
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Shepelenko");
     await expect(page.getByRole("heading", { name: "Journalistinen tuotanto" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Puolueiden käsittely" }).first()).toBeVisible();
-    await expect(page.getByText(/Sisältöanalyysi ei osoita toimittajan/).first()).toBeVisible();
+    await expect(page.getByText(/Sisältöanalyysi ei osoita toimittajan/)).toBeVisible();
   });
 
   test("media profile shows ownership + journalists", async ({ page }) => {
@@ -113,7 +124,7 @@ test.describe("person profile", () => {
 test.describe("money page", () => {
   test("money shows honest empty-or-real state and no demo flows", async ({ page }) => {
     await page.goto("/money");
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("Julkinen raha");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Raha");
     const body = await page.textContent("body");
     expect(body).not.toContain("DEMO");
     expect(body).not.toContain("(demo)");
@@ -187,7 +198,8 @@ test.describe("admin access protection", () => {
     expect(res.status()).toBe(401);
   });
 
-  test("admin can log in and access dashboard", async ({ page }) => {
+  test("admin can log in and access dashboard", async ({ page, browserName, baseURL }) => {
+    skipWebkitHttpAuth(browserName, baseURL);
     const password = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "dev-admin-password";
     await page.goto("/login");
     await page.getByLabel("Salasana").fill(password);
@@ -196,7 +208,8 @@ test.describe("admin access protection", () => {
     await expect(page.getByRole("heading", { name: /Hallinta/ })).toBeVisible();
   });
 
-  test("admin ingestion + review pages render", async ({ page }) => {
+  test("admin ingestion + review pages render", async ({ page, browserName, baseURL }) => {
+    skipWebkitHttpAuth(browserName, baseURL);
     const password = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "dev-admin-password";
     await page.goto("/login");
     await page.getByLabel("Salasana").fill(password);
@@ -304,7 +317,8 @@ test.describe("corrections", () => {
 });
 
 test.describe("logout", () => {
-  test("logout clears session and returns to same origin", async ({ page }) => {
+  test("logout clears session and returns to same origin", async ({ page, browserName, baseURL }) => {
+    skipWebkitHttpAuth(browserName, baseURL);
     const password = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "dev-admin-password";
     await page.goto("/login");
     await page.getByLabel("Salasana").fill(password);

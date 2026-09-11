@@ -71,8 +71,13 @@ export default function ChangesList({
               {g.subject.canonicalName}
             </Link>
           ) : null;
+          const sharedRelType = g.items.every(
+            (it) => it.relationship?.relationshipType === first.relationship?.relationshipType,
+          )
+            ? (first.relationship?.relationshipType ?? null)
+            : null;
           sentence = grouped
-            ? changeEventGroupSentence({ eventType: g.eventType, entityName: g.subject?.canonicalName, count: g.items.length })
+            ? changeEventGroupSentence({ eventType: g.eventType, count: g.items.length, relationshipType: sharedRelType })
             : sentenceFor(first);
         }
 

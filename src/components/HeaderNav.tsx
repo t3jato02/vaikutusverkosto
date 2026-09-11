@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import CommandPalette from "@/components/CommandPalette";
 
 const NAV = [
   { href: "/explore", label: "Tutki" },
@@ -11,7 +12,6 @@ const NAV = [
   { href: "/foreign", label: "Kv-yhteydet" },
   { href: "/analytics", label: "Analyysi" },
   { href: "/decisions", label: "Päätökset" },
-  { href: "/vaikuta", label: "Vaikuta" },
   { href: "/map", label: "Kartta" },
   { href: "/changes", label: "Muutokset" },
   { href: "/sources", label: "Lähteet" },
@@ -20,27 +20,15 @@ const NAV = [
 
 export default function HeaderNav({ admin }: { admin: boolean }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   useEffect(() => setOpen(false), [pathname]);
-
-  // Global search shortcut (Cmd/Ctrl+K) → the search page.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        router.push("/search");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [router]);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/85 backdrop-blur supports-[backdrop-filter]:bg-paper/70">
+      <CommandPalette />
       <div className="mx-auto flex w-full max-w-content items-center gap-3 px-4 py-2.5 sm:px-6">
         <button
           type="button"
@@ -68,32 +56,38 @@ export default function HeaderNav({ admin }: { admin: boolean }) {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Link
-            href="/search"
-            className="hidden items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink-300 transition hover:border-ink-300 hover:text-muted lg:flex"
-            aria-label="Hae henkilöä, organisaatiota tai päätöstä"
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+            className="hidden items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink-300 transition hover:border-ink-300 hover:text-muted sm:flex"
+            aria-label="Hae henkilöä, organisaatiota tai päätöstä (Cmd/Ctrl+K)"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <circle cx="11" cy="11" r="7" />
               <path d="M21 21l-4.3-4.3" />
             </svg>
-            <span className="hidden xl:inline">Hae henkilöä, organisaatiota…</span>
-            <kbd className="hidden rounded border border-line bg-paper px-1 text-[10px] font-medium text-ink-300 xl:inline">
+            <span className="hidden md:inline">Hae henkilöä, organisaatiota…</span>
+            <kbd className="hidden rounded border border-line bg-paper px-1 text-[10px] font-medium text-ink-300 md:inline">
               ⌘K
             </kbd>
-          </Link>
-          <Link href="/search" className="btn-ghost p-1.5 lg:hidden" aria-label="Hae">
+          </button>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+            className="btn-ghost p-1.5 sm:hidden"
+            aria-label="Hae"
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               <circle cx="11" cy="11" r="7" />
               <path d="M21 21l-4.3-4.3" />
             </svg>
-          </Link>
+          </button>
           {admin ? (
-            <Link href="/admin" className="hidden text-[12px] font-medium text-muted hover:text-accent sm:inline-block">
+            <Link href="/admin" className="hidden text-[13px] font-medium text-muted hover:text-accent sm:inline-block">
               Ylläpito
             </Link>
           ) : (
-            <Link href="/login" className="hidden text-[12px] text-ink-300 hover:text-ink sm:inline-block">
+            <Link href="/login" className="hidden text-[13px] text-ink-300 hover:text-ink sm:inline-block">
               Kirjaudu
             </Link>
           )}

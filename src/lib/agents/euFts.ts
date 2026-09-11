@@ -13,8 +13,8 @@
 import { mkdtempSync, existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EntityType, FlowType, FundingType, SourceType } from "@prisma/client";
-import type { NormalizedFact, SourceAdapter, SourceDocument } from "./types";
+import { EntityType, FlowType, FundingType, SourceType, type Prisma, type PrismaClient } from "@prisma/client";
+import type { NormalizedFact, RunContext, SourceAdapter, SourceDocument } from "./types";
 import { assertSchema } from "@/lib/ingestion/schemaFingerprint";
 
 // Columns the parser cannot work without. If the official export drops one, the
@@ -216,6 +216,128 @@ function projectRefOf(r: FtsRecord) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Resumable discovery (Sprint C2 hotfix).
+//
+// `discover()` used to re-download + re-stream-parse both ~20 MB XLSX files on
+// every tick. On Vercel that alone exceeded the function limit, so the pipeline
+// never reached the publish phase and `/foreign` stayed empty forever.
+//
+// Fix: the first tick that sees an uncached year downloads + parses it and
+// persists every parsed record straight away as a PENDING SourceDocument
+// (contentHash "" is a sentinel — the collector recomputes it on first real
+// processing, so the row reads as "changed" and the flow is published; on a
+// second run the hash matches and the row is "unchanged", so nothing is
+// duplicated). Later ticks rebuild the descriptor list from those rows with a
+// cheap DB read and no network. A year older than the cadence window is
+// re-pulled so a genuine monthly refresh still picks up new records.
+// ---------------------------------------------------------------------------
+const FTS_SOURCE_ID = "eu-fts-agent";
+// Just under the "monthly" cadence window (see scheduler CADENCE_MAX_AGE_MS) so
+// a scheduled refresh re-downloads instead of serving a stale cache.
+export const FTS_CACHE_MAX_AGE_MS = 26 * 24 * 60 * 60 * 1000;
+
+type FtsDb = Pick<PrismaClient, "sourceDocument">;
+
+function descriptorFromRow(r: {
+  externalId: string;
+  canonicalUrl: string;
+  title: string | null;
+  metadata: unknown;
+}): SourceDocument | null {
+  const meta = (r.metadata as { meta?: FtsRecord } | null)?.meta;
+  if (!meta) return null;
+  return { id: r.externalId, url: r.canonicalUrl, title: r.title ?? "", publishedAt: null, hash: "", meta };
+}
+
+/**
+ * Marker row proving a year's persist FULLY finished (not just "some row for
+ * this year exists" — a tick that got SIGKILLed partway through
+ * persistFtsDescriptors must not be mistaken for a complete year, or the
+ * remaining records would never be retried before FTS_CACHE_MAX_AGE_MS).
+ */
+function ftsCompleteMarkerId(year: number): string {
+  return `eu-fts:_complete:${year}`;
+}
+
+/** A year is cached only once its completion marker is present and fresh. */
+export async function ftsYearCached(db: FtsDb, year: number, now = Date.now()): Promise<boolean> {
+  const row = await db.sourceDocument.findUnique({
+    where: { ingestionSourceId_externalId: { ingestionSourceId: FTS_SOURCE_ID, externalId: ftsCompleteMarkerId(year) } },
+    select: { firstSeenAt: true },
+  });
+  return !!row && now - row.firstSeenAt.getTime() < FTS_CACHE_MAX_AGE_MS;
+}
+
+/** Written only after every record for a year has been persisted. */
+export async function markFtsYearComplete(db: FtsDb, year: number, recordCount: number): Promise<void> {
+  const now = new Date();
+  await db.sourceDocument.upsert({
+    where: { ingestionSourceId_externalId: { ingestionSourceId: FTS_SOURCE_ID, externalId: ftsCompleteMarkerId(year) } },
+    create: {
+      ingestionSourceId: FTS_SOURCE_ID,
+      externalId: ftsCompleteMarkerId(year),
+      canonicalUrl: DATASET_URL(year),
+      documentType: "json",
+      title: `EU FTS ${year} — discovery complete`,
+      contentHash: `complete:${recordCount}`,
+      metadata: { complete: true, recordCount } as Prisma.InputJsonValue,
+    },
+    // No `meta` key → descriptorFromRow() filters this row out of the real
+    // descriptor list on its own; re-persisting just refreshes the window.
+    update: { contentHash: `complete:${recordCount}`, metadata: { complete: true, recordCount } as Prisma.InputJsonValue, firstSeenAt: now, lastSeenAt: now },
+  });
+}
+
+/** Rebuild the full descriptor list from persisted SourceDocument rows (no network). */
+export async function cachedFtsDescriptors(db: FtsDb): Promise<SourceDocument[]> {
+  const rows = await db.sourceDocument.findMany({
+    where: { ingestionSourceId: FTS_SOURCE_ID },
+    select: { externalId: true, canonicalUrl: true, title: true, metadata: true },
+  });
+  const out: SourceDocument[] = [];
+  for (const r of rows) {
+    const d = descriptorFromRow(r);
+    if (d) out.push(d);
+  }
+  return out;
+}
+
+/** Persist parsed descriptors up-front so a later tick can skip the download. */
+export async function persistFtsDescriptors(db: FtsDb, docs: SourceDocument[]): Promise<number> {
+  const CHUNK = 500;
+  let written = 0;
+  for (let i = 0; i < docs.length; i += CHUNK) {
+    const slice = docs.slice(i, i + CHUNK);
+    const res = await db.sourceDocument.createMany({
+      data: slice.map((d) => ({
+        ingestionSourceId: FTS_SOURCE_ID,
+        externalId: d.id,
+        canonicalUrl: d.url,
+        documentType: "json",
+        title: d.title || null,
+        contentHash: "", // sentinel; the collector fills it on first processing
+        metadata: { meta: d.meta } as Prisma.InputJsonValue,
+        rawJson: (d.meta ?? null) as Prisma.InputJsonValue,
+      })),
+      skipDuplicates: true,
+    });
+    written += res.count;
+  }
+  return written;
+}
+
+function ftsDescriptorsForYear(year: number, records: FtsRecord[]): SourceDocument[] {
+  return records.map((r) => ({
+    id: recordKey(r),
+    url: `${DATASET_URL(year)}#${encodeURIComponent(r.lc || r.budgetRef || r.name)}`,
+    title: `EU FTS ${year} — ${r.name} (${r.lc || r.budgetRef})`,
+    publishedAt: null,
+    hash: "",
+    meta: r as unknown,
+  }));
+}
+
 export const euFtsAdapter: SourceAdapter = {
   id: "eu-fts-agent",
   name: "EU Financial Transparency System — suomalaiset EU-varojen saajat",
@@ -232,27 +354,30 @@ export const euFtsAdapter: SourceAdapter = {
     "XLSX-jäsennys. Jokaisesta rivistä evidensoitu FinancialFlow (Euroopan komissio → suomalainen " +
     "saaja), funderCountryCode = EU, isForeign = true. Vain amount > 0.",
 
-  async discover(ctx): Promise<SourceDocument[]> {
-    const docs: SourceDocument[] = [];
+  async discover(ctx: RunContext): Promise<SourceDocument[]> {
+    const db = ctx.db;
     for (const year of YEARS) {
+      // Skip the ~20 MB download+parse when this year is already persisted and
+      // still inside the cadence window.
+      if (await ftsYearCached(db, year)) continue;
       try {
         const path = await ensureXlsx(year, ctx.log);
         const records = await streamFinnishRecords(path, year, ctx.log);
-        for (const r of records) {
-          docs.push({
-            id: recordKey(r),
-            url: `${DATASET_URL(year)}#${encodeURIComponent(r.lc || r.budgetRef || r.name)}`,
-            title: `EU FTS ${year} — ${r.name} (${r.lc || r.budgetRef})`,
-            publishedAt: null,
-            hash: "",
-            meta: r,
-          });
-        }
+        const yearDocs = ftsDescriptorsForYear(year, records);
+        const written = await persistFtsDescriptors(db, yearDocs);
+        // Only mark the year cached once every record is durably persisted —
+        // if this tick gets killed before reaching this line, no marker is
+        // written and the next tick retries the year from scratch instead of
+        // silently treating a partial persist as "done".
+        await markFtsYearComplete(db, year, yearDocs.length);
+        ctx.log(`FTS ${year}: persisted ${written}/${yearDocs.length} descriptors`);
       } catch (e) {
         // One year failing must not corrupt the others.
         ctx.log(`FTS ${year}: skipped — ${(e as Error).message}`);
       }
     }
+    const docs = await cachedFtsDescriptors(db);
+    ctx.log(`discovery: ${docs.length} descriptors available (persisted cache)`);
     return docs;
   },
 

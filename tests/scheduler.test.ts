@@ -74,6 +74,19 @@ describe.skipIf(!hasDb)("source scheduler (Phase 14)", () => {
     expect(await dueSources()).toContain("sched-test-daily");
   });
 
+  it("a RUNNING source wins a scarce per-tick slot over stale-but-due sources ahead of it", async () => {
+    // Two never-checked sources sort ahead of the RUNNING one (lastCheckedAt
+    // asc, nulls first) and would otherwise fill both MAX_SOURCES_PER_TICK
+    // slots every tick, starving the in-progress resumable run forever.
+    await mkSource("sched-test-daily", "daily", null);
+    await mkSource("sched-test-weekly", "weekly", null);
+    await mkSource("sched-test-monthly", "monthly", new Date()); // fresh lastCheckedAt → not cadence-due
+    await db.agentRun.create({ data: { agent: "sched-test-monthly", status: "RUNNING" } });
+    const due = await dueSources();
+    expect(due.length).toBeLessThanOrEqual(MAX_SOURCES_PER_TICK);
+    expect(due).toContain("sched-test-monthly");
+  });
+
   it("runOptionsFor returns bounded budgets", () => {
     expect(runOptionsFor("parliament-agent").maxDocsPerTick).toBeGreaterThan(0);
     expect(runOptionsFor("unknown").maxDocsPerTick).toBeLessThanOrEqual(5);

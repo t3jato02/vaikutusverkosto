@@ -6,7 +6,7 @@ import { toRelRows, sortRelRows } from "@/lib/relRows";
 import Avatar from "@/components/Avatar";
 import { ConfidenceBadge } from "@/components/badges";
 import RelationshipList from "@/components/RelationshipList";
-import GraphView from "@/components/GraphView";
+import GraphView from "@/components/LazyGraphView";
 import EntityNetworkPosition from "@/components/EntityNetworkPosition";
 import type { Prisma } from "@prisma/client";
 

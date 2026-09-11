@@ -25,7 +25,6 @@ const TEMPORAL: { value: Temporal; label: string }[] = [
   { value: "historical", label: "Historialliset" },
   { value: "all", label: "Kaikki" },
 ];
-
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   const scope = (SCOPES.find((s) => s.value === sp.scope)?.value ?? "funding") as GraphScope;
@@ -40,6 +39,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   });
   const rows = a.top[metric as keyof typeof a.top];
   const isMoney = scope === "funding" || scope === "international";
+  const scopeMeta = SCOPES.find((s) => s.value === scope)!;
 
   // Human-readable names for the structural metrics. These describe the shape of
   // the selected network — never a person's conduct.
@@ -65,10 +65,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     "?" + new URLSearchParams({ scope, temporal, metric: sp.metric ?? "degree", ...o }).toString();
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-xl font-bold">Verkostoanalyysi</h1>
-        <p className="mt-1 max-w-3xl text-sm text-ink-500">
+    <div className="mx-auto max-w-content space-y-8">
+      <header className="max-w-2xl">
+        <h1 className="text-page-title">Verkostoanalyysi</h1>
+        <p className="mt-2 text-sm text-muted">
           Rakenteellisia mittareita lähdeperustaisesta graafista. Nämä kuvaavat <strong>verkon
           rakennetta</strong> — eivät henkilön moraalia, lainmukaisuutta tai syyllisyyttä.
           Järjestelmä ei laske &quot;vaikuttamis-scorea&quot;.{" "}
@@ -76,62 +76,58 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         </p>
       </header>
 
-      <nav aria-label="Verkoston tyyppi" className="flex flex-wrap gap-2">
+      <nav aria-label="Verkoston tyyppi" className="flex flex-wrap gap-1.5">
         {SCOPES.map((s) => (
-          <Link
-            key={s.value}
-            href={q({ scope: s.value })}
-            className={`rounded border px-2 py-1 text-xs ${scope === s.value ? "border-accent bg-accent/10 text-accent" : "border-ink-200 text-ink-600"}`}
-            title={s.desc}
-          >
+          <Link key={s.value} href={q({ scope: s.value })} className="chip" data-selected={scope === s.value} title={s.desc}>
             {s.label}
           </Link>
         ))}
       </nav>
 
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-ink-500">Aika:</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
+        <span className="text-muted">Aika:</span>
         {TEMPORAL.map((t) => (
-          <Link key={t.value} href={q({ temporal: t.value })} className={`rounded px-2 py-0.5 ${temporal === t.value ? "bg-ink-900 text-white" : "bg-ink-100 text-ink-600"}`}>
+          <Link key={t.value} href={q({ temporal: t.value })} className="chip" data-selected={temporal === t.value}>
             {t.label}
           </Link>
         ))}
-        <span className="ml-3 text-ink-500">Mittari:</span>
+        <span className="ml-2 text-muted">Mittari:</span>
         {[
           { k: "degree", l: METRIC_LABELS.degree.short },
           { k: "weighted", l: METRIC_LABELS.weighted.short },
           { k: "betweenness", l: METRIC_LABELS.betweenness.short },
         ].map((m) => (
-          <Link key={m.k} href={q({ metric: m.k })} className={`rounded px-2 py-0.5 ${metricKey === m.k ? "bg-ink-900 text-white" : "bg-ink-100 text-ink-600"}`}>
+          <Link key={m.k} href={q({ metric: m.k })} className="chip" data-selected={metricKey === m.k}>
+
             {m.l}
           </Link>
         ))}
       </div>
 
-      <p className="max-w-3xl rounded border border-ink-100 bg-ink-50 p-2 text-[11px] text-ink-600">
-        <strong>{activeMetric.short}.</strong> {activeMetric.help} Korkea sija tässä listassa{" "}
-        <strong>ei</strong> tarkoita väärinkäytöstä, korruptiota, lainvastaisuutta tai epäasiallista
-        vaikuttamista — se kuvaa vain toimijan asemaa dokumentoitujen yhteyksien verkossa.
+      <p className="max-w-2xl rounded-md border border-line bg-surface p-3 text-[12px] text-muted">
+        <strong className="text-ink">{activeMetric.short}.</strong> {activeMetric.help} Korkea sija
+        tässä listassa <strong>ei</strong> tarkoita väärinkäytöstä, korruptiota, lainvastaisuutta tai
+        epäasiallista vaikuttamista — se kuvaa vain toimijan asemaa dokumentoitujen yhteyksien
+        verkossa.
       </p>
 
       <section aria-label="Tulokset">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="card-title">{SCOPES.find((s) => s.value === scope)!.label.toUpperCase()}</h2>
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="section-title">{scopeMeta.label}</h2>
           <details className="text-[11px]">
             <summary className="cursor-pointer text-accent">Miten tämä laskettiin?</summary>
-            <div className="mt-1 rounded border border-ink-100 bg-ink-50 p-2 text-ink-600">
-              <p>Verkko: {SCOPES.find((s) => s.value === scope)!.label} — {SCOPES.find((s) => s.value === scope)!.desc}</p>
+            <div className="mt-1 rounded-md border border-line bg-surface p-3 text-muted">
+              <p>Verkko: {scopeMeta.label} — {scopeMeta.desc}</p>
               <p>
                 Ajallinen rajaus:{" "}
                 {temporal === "current"
-                  ? "vain nykyiset (CURRENT) yhteydet — päättyneet jätetty pois"
+                  ? "vain nykyiset yhteydet — päättyneet jätetty pois"
                   : temporal === "historical"
-                    ? "vain historialliset (HISTORICAL) yhteydet"
-                    : "kaikki yhteydet (CURRENT + HISTORICAL)"}
+                    ? "vain historialliset yhteydet"
+                    : "kaikki yhteydet (nykyiset + historialliset)"}
               </p>
               <p>Mukana vain julkisesti näkyvät, lähteellä vahvistetut yhteydet.</p>
-              <p>Algoritmi: {a.algorithm}</p>
-              <p>Algoritmiversio: v{a.algorithmVersion}</p>
+              <p>Algoritmi: {a.algorithm} (v{a.algorithmVersion})</p>
               <p>Solmuja: {a.nodeCount} · viivoja: {a.edgeCount}</p>
               <p>Laskettu: {new Date(a.calculatedAt).toLocaleString("fi-FI")} {a.cached ? "(välimuistista)" : "(tuore laskenta)"}</p>
               <p className="mt-1 italic">
@@ -141,18 +137,18 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             </div>
           </details>
         </div>
-        <ul className="card divide-y divide-ink-100">
-          {rows.length === 0 && <li className="py-3 text-sm text-ink-500">Ei dataa tälle verkolle näillä suodattimilla.</li>}
+        <ul className="card divide-y divide-line">
+          {rows.length === 0 && <li className="py-3 text-sm text-muted">Ei dataa tälle verkolle näillä suodattimilla.</li>}
           {rows.map((r, i) => (
-            <li key={r.entityId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm">
+            <li key={r.entityId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5 text-sm">
               <span className="min-w-0 flex-1 basis-full [overflow-wrap:anywhere] sm:basis-auto">
-                <span className="mr-2 tabular-nums text-ink-400">{i + 1}.</span>
-                <Link href={entityUrlFor(r.entityId, r.type as EntityType, r.name)} className="font-medium text-accent hover:underline">
+                <span className="mr-2 tabular-nums text-ink-300">{i + 1}.</span>
+                <Link href={entityUrlFor(r.entityId, r.type as EntityType, r.name)} className="font-medium text-ink hover:text-accent">
                   {r.name}
                 </Link>
-                <span className="ml-2 text-[11px] text-ink-400">{entityLabel(r.type as EntityType)}</span>
+                <span className="ml-2 text-[11px] text-ink-300">{entityLabel(r.type as EntityType)}</span>
               </span>
-              <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-ink-500">
+              <span className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums text-muted">
                 <span title="Yhteyksien määrä verkossa">{r.degree} yhteyttä</span>
                 <span title={isMoney ? "Dokumentoitujen rahayhteyksien paino" : "Painotettu yhteysmäärä"}>
                   {isMoney ? formatEur(r.weightedDegree) : `paino ${r.weightedDegree}`}

@@ -135,7 +135,8 @@ export async function foreignFundingGraph(f: ForeignFundingFilters & { limit?: n
 
 export async function foreignFundingOverview(f: ForeignFundingFilters = {}) {
   const where = buildForeignFundingWhere(f);
-  const [total, byCountry, byType, byYearRaw, topRecipients, countries] = await Promise.all([
+  const [total, byCountry, byType, byYearRaw, topRecipients, countries, years, byStatus, lastUpdated] =
+    await Promise.all([
     db.financialFlow.aggregate({ where, _sum: { amount: true }, _count: { _all: true } }),
     db.financialFlow.groupBy({ by: ["funderCountryCode"], where, _sum: { amount: true }, _count: { _all: true }, orderBy: { _sum: { amount: "desc" } } }),
     db.financialFlow.groupBy({ by: ["fundingType"], where, _sum: { amount: true }, _count: { _all: true }, orderBy: { _sum: { amount: "desc" } } }),
@@ -143,6 +144,9 @@ export async function foreignFundingOverview(f: ForeignFundingFilters = {}) {
     db.financialFlow.groupBy({ by: ["periodYear"], where, _sum: { amount: true }, _count: { _all: true }, orderBy: { periodYear: "asc" } }),
     db.financialFlow.groupBy({ by: ["recipientEntityId"], where, _sum: { amount: true }, _count: { _all: true }, orderBy: { _sum: { amount: "desc" } }, take: 10 }),
     db.country.findMany({ orderBy: { name: "asc" } }),
+    db.financialFlow.aggregate({ where, _min: { periodYear: true }, _max: { periodYear: true } }),
+    db.financialFlow.groupBy({ by: ["verificationStatus"], where, _count: { _all: true } }),
+    db.financialFlow.aggregate({ where, _max: { updatedAt: true } }),
   ]);
   const byYear = byYearRaw
     .filter((y) => y.periodYear != null)
@@ -163,5 +167,9 @@ export async function foreignFundingOverview(f: ForeignFundingFilters = {}) {
     topRecipients,
     recipientEntities,
     countries,
+    yearMin: years._min.periodYear ?? null,
+    yearMax: years._max.periodYear ?? null,
+    byStatus,
+    lastUpdated: lastUpdated._max.updatedAt ?? null,
   };
 }

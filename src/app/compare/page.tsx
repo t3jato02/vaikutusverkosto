@@ -119,8 +119,8 @@ export default async function ComparePage({
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-xl font-bold">Vertailu</h1>
-        <p className="mt-1 text-sm text-ink-500">
+        <h1 className="text-page-title">Vertailu</h1>
+        <p className="mt-1 text-sm text-muted">
           Vertaa henkilöiden ja organisaatioiden dokumentoituja mittareita, yhteyksiä ja
           päällekkäisiä verkostoja.
         </p>
@@ -137,8 +137,8 @@ export default async function ComparePage({
           <section aria-label="Mittarit" className="card overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-ink-100">
-                  <th className="py-2 pr-4 text-left text-xs font-semibold uppercase text-ink-500">Mittari</th>
+                <tr className="border-b border-line">
+                  <th className="py-2 pr-4 text-left text-xs font-semibold uppercase text-muted">Mittari</th>
                   <th className="px-4 py-2 text-left font-semibold">
                     <span className="flex items-center gap-2">
                       <Avatar name={L.entity!.canonicalName} type={L.entity!.type} size={24} />
@@ -155,8 +155,8 @@ export default async function ComparePage({
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.label} className="border-b border-ink-100/60 last:border-0">
-                    <td className="py-2 pr-4 text-ink-500">{r.label}</td>
+                  <tr key={r.label} className="border-b border-line/60 last:border-0">
+                    <td className="py-2 pr-4 text-muted">{r.label}</td>
                     <td className="px-4 py-2 font-semibold tabular-nums">{r.l}</td>
                     <td className="px-4 py-2 font-semibold tabular-nums">{r.r}</td>
                   </tr>
@@ -169,13 +169,13 @@ export default async function ComparePage({
           </section>
 
           <section aria-label="Päällekkäiset verkostot">
-            <h2 className="card-title mb-2">YHTEISET ORGANISAATIOT</h2>
-            <ul className="card divide-y divide-ink-100">
+            <h2 className="section-title mb-2">Yhteiset organisaatiot</h2>
+            <ul className="card divide-y divide-line">
               {overlapNames.length === 0 && (
-                <li className="py-3 text-sm text-ink-500">Ei dokumentoituja yhteisiä organisaatioita.</li>
+                <li className="py-3 text-sm text-muted">Ei dokumentoituja yhteisiä organisaatioita.</li>
               )}
               {overlapNames.map((o) => (
-                <li key={o.id} className="py-2 text-sm font-medium text-ink-900">
+                <li key={o.id} className="py-2 text-sm font-medium text-ink">
                   {o.canonicalName}
                 </li>
               ))}
@@ -185,7 +185,7 @@ export default async function ComparePage({
       )}
 
       {(!L || !R) && (
-        <p className="text-sm text-ink-500">
+        <p className="text-sm text-muted">
           Anna kaksi hakusanaa (esim. kaksi henkilöä) vertailua varten.
         </p>
       )}
