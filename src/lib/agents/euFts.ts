@@ -250,14 +250,43 @@ function descriptorFromRow(r: {
   return { id: r.externalId, url: r.canonicalUrl, title: r.title ?? "", publishedAt: null, hash: "", meta };
 }
 
-/** A year is cached when it has at least one persisted row newer than the cadence window. */
+/**
+ * Marker row proving a year's persist FULLY finished (not just "some row for
+ * this year exists" — a tick that got SIGKILLed partway through
+ * persistFtsDescriptors must not be mistaken for a complete year, or the
+ * remaining records would never be retried before FTS_CACHE_MAX_AGE_MS).
+ */
+function ftsCompleteMarkerId(year: number): string {
+  return `eu-fts:_complete:${year}`;
+}
+
+/** A year is cached only once its completion marker is present and fresh. */
 export async function ftsYearCached(db: FtsDb, year: number, now = Date.now()): Promise<boolean> {
-  const row = await db.sourceDocument.findFirst({
-    where: { ingestionSourceId: FTS_SOURCE_ID, externalId: { startsWith: `eu-fts:${year}:` } },
+  const row = await db.sourceDocument.findUnique({
+    where: { ingestionSourceId_externalId: { ingestionSourceId: FTS_SOURCE_ID, externalId: ftsCompleteMarkerId(year) } },
     select: { firstSeenAt: true },
-    orderBy: { firstSeenAt: "desc" },
   });
   return !!row && now - row.firstSeenAt.getTime() < FTS_CACHE_MAX_AGE_MS;
+}
+
+/** Written only after every record for a year has been persisted. */
+export async function markFtsYearComplete(db: FtsDb, year: number, recordCount: number): Promise<void> {
+  const now = new Date();
+  await db.sourceDocument.upsert({
+    where: { ingestionSourceId_externalId: { ingestionSourceId: FTS_SOURCE_ID, externalId: ftsCompleteMarkerId(year) } },
+    create: {
+      ingestionSourceId: FTS_SOURCE_ID,
+      externalId: ftsCompleteMarkerId(year),
+      canonicalUrl: DATASET_URL(year),
+      documentType: "json",
+      title: `EU FTS ${year} — discovery complete`,
+      contentHash: `complete:${recordCount}`,
+      metadata: { complete: true, recordCount } as Prisma.InputJsonValue,
+    },
+    // No `meta` key → descriptorFromRow() filters this row out of the real
+    // descriptor list on its own; re-persisting just refreshes the window.
+    update: { contentHash: `complete:${recordCount}`, metadata: { complete: true, recordCount } as Prisma.InputJsonValue, firstSeenAt: now, lastSeenAt: now },
+  });
 }
 
 /** Rebuild the full descriptor list from persisted SourceDocument rows (no network). */
@@ -336,6 +365,11 @@ export const euFtsAdapter: SourceAdapter = {
         const records = await streamFinnishRecords(path, year, ctx.log);
         const yearDocs = ftsDescriptorsForYear(year, records);
         const written = await persistFtsDescriptors(db, yearDocs);
+        // Only mark the year cached once every record is durably persisted —
+        // if this tick gets killed before reaching this line, no marker is
+        // written and the next tick retries the year from scratch instead of
+        // silently treating a partial persist as "done".
+        await markFtsYearComplete(db, year, yearDocs.length);
         ctx.log(`FTS ${year}: persisted ${written}/${yearDocs.length} descriptors`);
       } catch (e) {
         // One year failing must not corrupt the others.
