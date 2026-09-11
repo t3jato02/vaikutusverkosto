@@ -69,8 +69,9 @@ export function runOptionsFor(sourceId: string): { concurrency: number; maxDocsP
     case "eu-transparency-register":
       return { concurrency: 4, maxDocsPerTick: 40 };
     case "eu-fts-agent":
-      // Records are pre-gathered in discovery; publishing is the cost.
-      return { concurrency: 3, maxDocsPerTick: 200 };
+      // Discovery persists a resumable descriptor cache (no per-tick re-download),
+      // so a tick's cost is just publishing — 300 s comfortably fits ~400.
+      return { concurrency: 3, maxDocsPerTick: 400 };
     default:
       return { concurrency: 2, maxDocsPerTick: 2 };
   }
