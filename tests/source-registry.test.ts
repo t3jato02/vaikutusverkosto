@@ -81,11 +81,14 @@ describe.skipIf(!hasDb)("Source Registry (Sprint B)", () => {
 });
 
 describe("ingestion alerts (Sprint C5, Phase 28)", () => {
+  // Relative to "now" — a fixed calendar date here would eventually become
+  // stale and make the "overdue" check fire on an otherwise-healthy fixture.
+  const recentCheck = new Date(Date.now() - 2 * 3600_000); // 2h ago — within a daily cadence
   const base = {
     enabled: true,
     consecutiveFailures: 0,
-    lastSuccessAt: new Date("2026-09-06T04:00:00Z"),
-    lastCheckedAt: new Date("2026-09-06T04:00:00Z"),
+    lastSuccessAt: recentCheck,
+    lastCheckedAt: recentCheck,
     lastError: null as string | null,
     lastRunDocsChecked: 120,
     updateCadence: "daily",
