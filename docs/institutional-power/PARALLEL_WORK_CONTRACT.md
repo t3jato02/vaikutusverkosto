@@ -8,10 +8,15 @@ expansion. Read `ARCHITECTURE.md` (same directory) for the schema and interfaces
 ## 1. Integration base SHA (branch from here)
 
 ```
-INTEGRATION_BASE_SHA = <filled at foundation commit>
-FOUNDATION_READY_SHA  = <filled at foundation commit>
+INTEGRATION_BASE_SHA = 4c76d21 (see below — the foundation tip with SHAs recorded)
+FOUNDATION_READY_SHA  = 91e64934344b88f62f202bfda2ae03bac1e7e456
 BRANCH                = institutional-power-foundation
 ```
+
+The foundation code (schema, libs, agent interface, tests) is `FOUNDATION_READY_SHA`
+`91e6493`. The integration base for parallel streams is the tip of
+`institutional-power-foundation` once the SHAs above were recorded — see `git log -1` on
+the branch (this contract's SHA row is filled by that final commit).
 
 All parallel streams **must branch from `INTEGRATION_BASE_SHA`** (the foundation commit).
 Do not branch from `sprint-*` branches. The final integrator merges streams into the
