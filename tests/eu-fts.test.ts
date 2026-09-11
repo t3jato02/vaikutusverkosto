@@ -6,6 +6,7 @@ import {
   ftsYearCached,
   cachedFtsDescriptors,
   persistFtsDescriptors,
+  markFtsYearComplete,
   FTS_CACHE_MAX_AGE_MS,
   type FtsRecord,
 } from "@/lib/agents/euFts";
@@ -151,18 +152,17 @@ describe.skipIf(!process.env.DATABASE_URL)("EU FTS resumable discovery", () => {
     meta: { year: TEST_YEAR, name: `TEST BENEFICIARY ${n}`, amount: 1000 + n, contractType: "Action Grant" } as unknown,
   });
   const seed = [mk(1), mk(2), mk(3)];
+  const markerId = `eu-fts:_complete:${TEST_YEAR}`;
+  const cleanup = () =>
+    db.sourceDocument.deleteMany({
+      where: { ingestionSourceId: "eu-fts-agent", OR: [{ externalId: { startsWith: prefix } }, { externalId: markerId }] },
+    });
 
   beforeAll(async () => {
     await ensureRegistrySource("eu-fts-agent");
-    await db.sourceDocument.deleteMany({
-      where: { ingestionSourceId: "eu-fts-agent", externalId: { startsWith: prefix } },
-    });
+    await cleanup();
   });
-  afterAll(async () => {
-    await db.sourceDocument.deleteMany({
-      where: { ingestionSourceId: "eu-fts-agent", externalId: { startsWith: prefix } },
-    });
-  });
+  afterAll(cleanup);
 
   it("persists descriptors and is idempotent (skipDuplicates)", async () => {
     const first = await persistFtsDescriptors(db, seed);
@@ -193,16 +193,31 @@ describe.skipIf(!process.env.DATABASE_URL)("EU FTS resumable discovery", () => {
     expect(mine[0].url).toContain(`${TEST_YEAR}_FTS_dataset_en.xlsx`);
   });
 
-  it("ftsYearCached: true for freshly persisted year, false once it ages past the window", async () => {
+  it("ftsYearCached: false until the completion marker is written, even with rows persisted", async () => {
+    // Regression: earlier this checked "any row exists for the year", so a
+    // tick killed mid-persist (only some records written) was wrongly treated
+    // as a fully-cached year and the rest were never retried.
+    expect(await ftsYearCached(db, TEST_YEAR)).toBe(false);
+    await markFtsYearComplete(db, TEST_YEAR, seed.length);
     expect(await ftsYearCached(db, TEST_YEAR)).toBe(true);
-    // Age every row for this year just past the cadence window.
+  });
+
+  it("ftsYearCached: false once the marker ages past the cadence window", async () => {
+    await markFtsYearComplete(db, TEST_YEAR, seed.length);
+    expect(await ftsYearCached(db, TEST_YEAR)).toBe(true);
     const old = new Date(Date.now() - FTS_CACHE_MAX_AGE_MS - 60_000);
-    await db.sourceDocument.updateMany({
-      where: { ingestionSourceId: "eu-fts-agent", externalId: { startsWith: prefix } },
+    await db.sourceDocument.update({
+      where: { ingestionSourceId_externalId: { ingestionSourceId: "eu-fts-agent", externalId: markerId } },
       data: { firstSeenAt: old },
     });
     expect(await ftsYearCached(db, TEST_YEAR)).toBe(false);
     // A year that was never ingested is not cached.
     expect(await ftsYearCached(db, 2098)).toBe(false);
+  });
+
+  it("the completion marker is excluded from cachedFtsDescriptors (no `meta`)", async () => {
+    await markFtsYearComplete(db, TEST_YEAR, seed.length);
+    const docs = await cachedFtsDescriptors(db);
+    expect(docs.some((d) => d.id === markerId)).toBe(false);
   });
 });
