@@ -91,7 +91,7 @@ body {
   }
 
   .nav-link {
-    @apply rounded-md px-2.5 py-1.5 text-[13px] font-medium text-muted transition hover:bg-ink-100 hover:text-ink;
+    @apply rounded-md px-2 py-1.5 text-[12px] font-medium text-muted transition hover:bg-ink-100 hover:text-ink;
   }
   .nav-link[aria-current="page"] {
     @apply bg-ink-100 text-ink;

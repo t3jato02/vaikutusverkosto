@@ -1,4 +1,4 @@
-import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, RoleType, Sector, CriticalFunction, ProcurementProcedure } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, BenefitEventType, ValuePrecision, RoleType, Sector, CriticalFunction, ProcurementProcedure } from "@prisma/client";
 
 /** Optional project a financial flow funds (Sprint C2). */
 export interface ProjectRef {
@@ -47,6 +47,9 @@ export interface NormalizedFact {
   dedupeKey?: string;
   /** Profile metadata for the source entity (used by adapter profile hooks only). */
   sourceProfile?: Record<string, unknown>;
+  /** Per-fact source strength override (the adapter has one global sourceType;
+   *  a manifest may mix official and secondary evidence for individual facts). */
+  sourceTypeOverride?: SourceType;
   /** Extraction provenance. "rule"/"llm"/"manual" route to the candidate lane. */
   extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
   extractorVersion?: string;
@@ -221,9 +224,78 @@ export interface LobbyingFact {
   dedupeKey?: string;
 }
 
+/** A proposed, source-backed benefit event (gift / award / honour / portrait / ...). */
+export interface BenefitEventFact {
+  kind: "benefit";
+  eventType: BenefitEventType;
+  title: string;
+  description?: string | null;
+  /** Giver / awarding organisation (optional — a documented event may not name one). */
+  giver?: EntityRef | null;
+  /** Recipient (optional — a portrait may only name subject + artist). */
+  recipient?: EntityRef | null;
+  payer?: EntityRef | null;
+  beneficiary?: EntityRef | null;
+  /** Portrait / commissioned work: subject and artist (section 8). */
+  subject?: EntityRef | null;
+  artist?: EntityRef | null;
+  eventDate?: Date | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+  monetaryValue?: number | null;
+  currency?: string;
+  valueType: ValuePrecision;
+  publicFundsUsed?: boolean | null;
+  country?: string | null;
+  /** "winner" | "selection" | "jury" | other documented role (section 9). */
+  selectionRole?: string | null;
+  confidence: Confidence;
+  /** Evidence URL (must be a real retrievable source). */
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  /** "deterministic-parser" / official sources may auto-publish; otherwise review. */
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  sourceDocumentId?: string | null;
+  /** Unique natural key used for idempotent upsert. */
+  dedupeKey: string;
+  /** Evidence-grade of the underlying source (A–E, default C). */
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+}
+
+/** A year-by-year financial-statement line item of an organisation (section 3). */
+export interface StatementItemFact {
+  kind: "statement";
+  entity: EntityRef;
+  fiscalYear: number;
+  statementKind: "INCOME" | "EXPENDITURE";
+  category: string; // stable machine key, e.g. "YLE_APPROPRIATION"
+  categoryLabel: string; // human label from the source document
+  amount: number;
+  currency: string;
+  valueType: ValuePrecision;
+  /** Grand-total row — never summed together with its child categories (section 43). */
+  isTotal?: boolean;
+  note?: string | null;
+  /** The official document this line comes from. */
+  reportUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  sourceDocumentId?: string | null;
+  /** Unique natural key used for idempotent upsert. */
+  dedupeKey: string;
+}
+
 /** Every fact kind an adapter may propose. */
 export type AgentFact =
   | NormalizedFact
+  | BenefitEventFact
+  | StatementItemFact
   | RoleAssignmentFact
   | OrganizationSectorFact
   | CriticalFunctionFact

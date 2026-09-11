@@ -348,3 +348,44 @@ export async function reviewAffiliation(
   ]);
   return { ok: true };
 }
+
+// ---------------------------------------------------------------- benefits / awards / gifts (section 6 & 9)
+
+/**
+ * Human review of a BenefitEvent row. Approving publishes it (PUBLISHED) and
+ * marks it HUMAN_VERIFIED — the only way that status may be reached. All
+ * review actions are written to the immutable ReviewAction audit trail.
+ */
+export async function reviewBenefit(
+  benefitId: string,
+  action: "approve" | "reject" | "dispute",
+  note?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const c = await db.benefitEvent.findUnique({
+    where: { id: benefitId },
+    select: { id: true, reviewStatus: true, verificationStatus: true, title: true, sourceId: true, recipientEntityId: true },
+  });
+  if (!c) return { ok: false, error: "not_found" };
+  if (c.reviewStatus === "PUBLISHED" || c.reviewStatus === "REJECTED") return { ok: false, error: "already_resolved" };
+
+  const nextReview = action === "approve" ? "PUBLISHED" : action === "reject" ? "REJECTED" : "DISPUTED";
+  const nextVerification = action === "approve" ? "HUMAN_VERIFIED" : action === "dispute" ? "DISPUTED" : c.verificationStatus;
+
+  await db.$transaction([
+    db.benefitEvent.update({
+      where: { id: benefitId },
+      data: { reviewStatus: nextReview, verificationStatus: nextVerification, reviewedBy: "admin", reviewedAt: new Date() },
+    }),
+    db.reviewAction.create({
+      data: {
+        targetType: "benefit",
+        targetId: benefitId,
+        action,
+        beforeData: { reviewStatus: c.reviewStatus, verificationStatus: c.verificationStatus },
+        afterData: { reviewStatus: nextReview, verificationStatus: nextVerification },
+        note: note?.slice(0, 2000) ?? null,
+      },
+    }),
+  ]);
+  return { ok: true };
+}

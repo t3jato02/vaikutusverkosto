@@ -21,6 +21,11 @@ function secretKey(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
+/** Shared HS256 signing key for admin and citizen sessions (jose). */
+export function signingKey(): Uint8Array {
+  return secretKey();
+}
+
 export async function createSessionToken(): Promise<string> {
   return new SignJWT({ role: "admin" })
     .setProtectedHeader({ alg: "HS256" })

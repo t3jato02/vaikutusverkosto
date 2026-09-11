@@ -241,6 +241,16 @@ model Entity {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
+  // Benefits / gifts / awards / hospitality (public media finance, section 6).
+  recipientBenefitEvents BenefitEvent[]           @relation("BenefitRecipient")
+  giverBenefitEvents     BenefitEvent[]           @relation("BenefitGiver")
+  payerBenefitEvents     BenefitEvent[]           @relation("BenefitPayer")
+  beneficiaryBenefitEvents BenefitEvent[]         @relation("BenefitBeneficiary")
+  subjectBenefitEvents   BenefitEvent[]           @relation("BenefitSubject")
+  artistBenefitEvents    BenefitEvent[]           @relation("BenefitArtist")
+  // Year-by-year financial statements (public media finance, section 3).
+  financialStatementItems FinancialStatementItem[]
+
   // Per-type extension records
   person       Person?
   organization Organization?
@@ -1188,6 +1198,9 @@ enum FlowType {
   FOUNDATION_GRANT
   ASSOCIATION_FUNDING
   PUBLIC_PROJECT_FUNDING
+  // Public media finance — rights & content procurement (section 3, 23).
+  RIGHTS_PAYMENT
+  CONTENT_PROCUREMENT
   OTHER
 }
 
@@ -1241,6 +1254,157 @@ model FinancialFlow {
   @@index([isForeign])
   @@index([funderCountryCode])
   @@index([projectId])
+}
+
+// ---------------------------------------------------------------- benefits / gifts / awards / hospitality (section 6)
+//
+// First-class, generic BenefitEvent model. A benefit event connects the people
+// and organisations involved in a gift, award, honour, portrait, commissioned
+// work, trip, hospitality or similar documented event. NEVER infer a benefit:
+// every row is source-backed, and the auto-publish policy routes everything
+// except exact official-register records to the review queue.
+//
+// Award semantics are kept strictly separate (section 9):
+//   received an award     → BenefitEvent (recipient = person)
+//   selected the winner   → BenefitEvent with selectionRole "selection"
+//   served on a jury      → BenefitEvent with selectionRole "jury"
+// These are distinct facts and are stored as distinct rows.
+
+enum BenefitEventType {
+  GIFT
+  AWARD
+  HONOUR
+  DECORATION
+  PORTRAIT
+  TRAVEL
+  ACCOMMODATION
+  HOSPITALITY
+  EVENT_TICKET
+  MEAL
+  PRIZE
+  SPONSORED_TRIP
+  COMMISSIONED_WORK
+  OTHER
+}
+
+// How precise a monetary value is. An ESTIMATED value is NEVER displayed as an
+// exact price (section 6, "Never display an estimate as an exact price").
+enum ValuePrecision {
+  EXACT // audited / official figure
+  REPORTED // reported figure, not audited
+  CALCULATED // derived from stated data (e.g. 98.4 % × total)
+  ESTIMATED // estimate
+  UNKNOWN // no value / not disclosed
+}
+
+enum BenefitReviewStatus {
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+  DISPUTED
+}
+
+model BenefitEvent {
+  id                  String             @id @default(uuid()) @db.Uuid
+  eventType           BenefitEventType
+  title               String
+  description         String?            @db.Text
+
+  // Who participated. All optional: a documented award may only name the
+  // recipient; a portrait may name subject + artist + commissioner.
+  recipientEntityId   String?            @db.Uuid
+  recipientEntity     Entity?            @relation("BenefitRecipient", fields: [recipientEntityId], references: [id], onDelete: SetNull)
+  giverEntityId       String?            @db.Uuid
+  giverEntity         Entity?            @relation("BenefitGiver", fields: [giverEntityId], references: [id], onDelete: SetNull)
+  payerEntityId       String?            @db.Uuid
+  payerEntity         Entity?            @relation("BenefitPayer", fields: [payerEntityId], references: [id], onDelete: SetNull)
+  beneficiaryEntityId String?            @db.Uuid
+  beneficiaryEntity   Entity?            @relation("BenefitBeneficiary", fields: [beneficiaryEntityId], references: [id], onDelete: SetNull)
+  // Portrait / commissioned work: subject and artist (section 8).
+  subjectEntityId     String?            @db.Uuid
+  subjectEntity       Entity?            @relation("BenefitSubject", fields: [subjectEntityId], references: [id], onDelete: SetNull)
+  artistEntityId      String?            @db.Uuid
+  artistEntity        Entity?            @relation("BenefitArtist", fields: [artistEntityId], references: [id], onDelete: SetNull)
+
+  eventDate           DateTime?          @db.Date
+  startDate           DateTime?          @db.Date
+  endDate             DateTime?          @db.Date
+  monetaryValue       Decimal?           @db.Decimal(18, 2)
+  currency            String?
+  valueType           ValuePrecision     @default(UNKNOWN)
+  publicFundsUsed     Boolean? // documented public-funds involvement (null = not documented)
+  country             String? // ISO-3166 alpha-2
+  selectionRole       String? // "winner" | "selection" | "jury" | other documented role
+
+  verificationStatus  VerificationStatus @default(AUTO_DETECTED)
+  confidence          Confidence         @default(HIGH)
+  confidenceScore     Float?
+  reviewStatus        BenefitReviewStatus @default(PENDING_REVIEW)
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  evidenceGrade       EvidenceGrade      @default(C)
+  sourceId            String?            @db.Uuid
+  source              Source?            @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  dedupeKey           String?            @unique
+  createdBy           String? // agent name or "human"
+  lastVerifiedAt      DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([recipientEntityId])
+  @@index([giverEntityId])
+  @@index([payerEntityId])
+  @@index([beneficiaryEntityId])
+  @@index([subjectEntityId])
+  @@index([artistEntityId])
+  @@index([eventType])
+  @@index([reviewStatus])
+  @@index([verificationStatus])
+  @@index([eventDate])
+}
+
+// ---------------------------------------------------------------- financial statements (section 3)
+//
+// Year-by-year audited income/expenditure line items of an organisation's
+// public financial statements. Kept separate from FinancialFlow: a statement
+// line item is a category total from an annual report (e.g. "henkilöstökulut
+// 262,1 M€"), NOT an entity-to-entity money movement. Entity-level movements
+// are recorded as FinancialFlow rows (e.g. state appropriation → Yle). The two
+// views are never summed together without explaining the calculation.
+// `isTotal` marks the grand-total line so aggregations never double-count a
+// parent and its child categories (section 43).
+
+enum StatementKind {
+  INCOME
+  EXPENDITURE
+}
+
+model FinancialStatementItem {
+  id            String            @id @default(uuid()) @db.Uuid
+  entityId      String            @db.Uuid
+  entity        Entity            @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  fiscalYear    Int
+  kind          StatementKind
+  category      String // stable machine key, e.g. "YLE_APPROPRIATION", "PERSONNEL_COSTS"
+  categoryLabel String // human label, e.g. "Henkilöstökulut"
+  amount        Decimal           @db.Decimal(18, 2)
+  currency      String            @default("EUR")
+  valueType     ValuePrecision    @default(EXACT)
+  isTotal       Boolean           @default(false)
+  note          String?           @db.Text
+  reportUrl     String // the official document this line comes from
+  sourceId      String?           @db.Uuid
+  source        Source?           @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  dedupeKey     String?           @unique
+  createdBy     String? // agent name or "human"
+  lastVerifiedAt DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@unique([entityId, fiscalYear, kind, category, reportUrl])
+  @@index([entityId, fiscalYear])
+  @@index([entityId, kind])
+  @@index([fiscalYear])
 }
 
 // ---------------------------------------------------------------- positions
@@ -1392,6 +1556,8 @@ model Source {
   events    Event[]
   agentRuns AgentRun[]
   articles  Article[]
+  benefitEvents          BenefitEvent[]
+  financialStatementItems FinancialStatementItem[]
 
   // VAIKUTA module
   campaignRecipients CampaignRecipient[]

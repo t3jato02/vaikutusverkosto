@@ -18,6 +18,7 @@ import { ConfidenceBadge } from "@/components/badges";
 import { CoveragePanel } from "@/components/journalism/Coverage";
 import { IdentityFramingSummary } from "@/components/journalism/IdentityFramingSummary";
 import { TrustLegend, TrustChip } from "@/components/journalism/TrustLayer";
+import MediaProfileSections from "@/components/media/MediaProfileSections";
 import RelationshipList from "@/components/RelationshipList";
 import { toRelRows, sortRelRows } from "@/lib/relRows";
 import GraphView from "@/components/GraphView";
@@ -83,6 +84,8 @@ export default async function MediaProfilePage({ params }: { params: Promise<{ s
           )}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="#tuotanto" className="btn-primary">Journalistinen tuotanto</Link>
+            <Link href="#rahoitus" className="btn">Rahoitus</Link>
+            <Link href="#johto" className="btn">Johto & hallinto</Link>
             <Link href="#lahteet" className="btn">Lähteet</Link>
             <Link href="/corrections" className="btn">Ilmoita virheestä</Link>
           </div>
@@ -183,6 +186,9 @@ export default async function MediaProfilePage({ params }: { params: Promise<{ s
       </div>
 
       <IdentityFramingSummary scope="OUTLET" entityId={entity.id} entityName={entity.canonicalName} />
+
+      {/* Julkinen media: rahoitus, rahankäyttö, johto, hallinto, palkinnot, lahjat, aikajana */}
+      <MediaProfileSections entityId={entity.id} />
 
       {/* lähteet */}
       <section id="lahteet" aria-label="Lähteet" className="scroll-mt-20">

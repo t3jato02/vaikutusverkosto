@@ -111,3 +111,39 @@ interpretation }`.
 - **B (next):** municipalities, wellbeing-services counties, universities, courts,
   foundations, media, procurement, EU funds, more agents.
 - **C:** broader local officials, municipal companies, regional institutions, historical data.
+
+
+## 10. Public media finance (Yleisradio Oy & generic public media)
+
+### Models (migration 20260911145809_public_media_finance)
+- **FinancialStatementItem** — year-by-year audited income/expenditure line items for an
+  organisation (entity, fiscalYear, kind INCOME|EXPENDITURE, category, amount, valueType,
+  isTotal, reportUrl). isTotal marks the audited grand total; the summation helper
+  (src/lib/financial.ts sumStatementItems) never double-counts parent and child
+  categories (section 43). Statement line items are category totals — entity-level money
+  movements stay in FinancialFlow (e.g. state appropriation → Yle).
+- **BenefitEvent** — first-class gifts / awards / honours / portraits / hospitality. Parties
+  (recipient, giver, payer, beneficiary, subject, artist) are optional entity refs; value
+  precision (EXACT/REPORTED/CALCULATED/ESTIMATED/UNKNOWN) is mandatory so an estimate is
+  never shown as an exact price. Review status gates public visibility; auto-publish only
+  for exact official-register records (see publish.ts publishBenefitEvent).
+
+### Agents (registered in src/lib/agents/registry.ts)
+- yle-agent — deterministic manifest ingestion of Yle's official finances, leadership and
+  governance; src/lib/agents/data/yle.ts holds the source-backed manifest. Weekly cadence.
+- ward-agent — documented Suuri journalistipalkinto winners; every award lands in the
+  review queue (secondary source), winner/selection/jury kept as separate facts.
+- gift-benefit-agent — ingestion channel for documented gift/benefit events; the manifest
+  is empty until a credible public source exists (section 30).
+
+### Yle profile
+The /media/[slug] profile gains data-driven sections: Rahoitus, Rahankäyttö, Johto,
+Hallinto (incl. hallintoneuvosto members maintained by the parliament agent), Palkinnot,
+Lahjat & edut and Aikajana. Person/journalist profiles gain Palkinnot and Lahjat & edut.
+Admin review for benefits lives at /admin/benefits (audited via ReviewAction).
+
+### Data quality
+scripts/reconcile-yle-entities.ts merges duplicate Yle entities into the canonical
+MEDIA_ORGANIZATION row (re-pointing FKs, merging aliases/external ids, ChangeLog
+IDENTITY_MERGED audit, no data loss). Run 
+pm run reconcile:yle.

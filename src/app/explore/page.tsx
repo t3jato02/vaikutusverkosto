@@ -1,18 +1,22 @@
 import Link from "next/link";
 import { getTopConnected, getCommitteeSizes, getPartySizes, getMoneyAggregates, entityUrlFor } from "@/lib/queries";
+import { getRecentBenefits, getTopAwardGivers } from "@/lib/mediaQueries";
 import { db } from "@/lib/db";
 import { entityLabel, FLOW_TYPE_LABELS } from "@/lib/constants";
+import { benefitEventTypeLabel, valuePrecisionLabel } from "@/lib/benefits";
 import { formatEur, formatNumber } from "@/lib/format";
 import Avatar from "@/components/Avatar";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExplorePage() {
-  const [topConnected, committees, parties, money] = await Promise.all([
+  const [topConnected, committees, parties, money, recentBenefits, awardGivers] = await Promise.all([
     getTopConnected(14),
     getCommitteeSizes(10),
     getPartySizes(),
     getMoneyAggregates(),
+    getRecentBenefits(30),
+    getTopAwardGivers(8),
   ]);
 
   const partyNames = new Map<string, string>();
@@ -106,6 +110,53 @@ export default async function ExplorePage() {
           </ul>
         )}
       </section>
+
+      {recentBenefits.length > 0 && (
+        <section id="palkinnot" aria-label="Palkinnot ja palkitut">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-4">
+            <h2 className="card-title">PALKINNOT JA PALKITUT</h2>
+            {awardGivers.length > 0 && (
+              <span className="text-[11px] text-ink-500">
+                Eniten dokumentoituja palkintoja:{" "}
+                {awardGivers.map((g, i) => (
+                  <span key={g.id}>
+                    {i > 0 && " · "}
+                    <Link href={entityUrlFor(g.id, "ORGANIZATION", g.name)} className="text-accent hover:underline">{g.name}</Link> ({g.awards})
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
+          <ul className="card divide-y divide-ink-100">
+            {recentBenefits.map((b) => (
+              <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] uppercase tracking-wide text-ink-500">{benefitEventTypeLabel(b.eventType)}</span>
+                  <span className="ml-1.5 text-sm font-medium text-ink-900">{b.title}</span>
+                  {b.recipient && (
+                    <Link href={entityUrlFor(b.recipient.id, "PERSON", b.recipient.canonicalName)} className="ml-1.5 text-sm text-accent hover:underline">
+                      {b.recipient.canonicalName}
+                    </Link>
+                  )}
+                  {b.giver && (
+                    <span className="ml-1.5 text-[11px] text-ink-500">— {b.giver.canonicalName}</span>
+                  )}
+                </div>
+                <span className="shrink-0 text-[11px] text-ink-500">
+                  {b.eventDate ? String(b.eventDate.getFullYear()) : ""}
+                  {b.monetaryValue !== null ? ` · ${formatEur(b.monetaryValue)} (${valuePrecisionLabel(b.valueType)})` : ""}
+                  {b.sourceUrl && (
+                    <>
+                      {" · "}
+                      <a href={b.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">lähde</a>
+                    </>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="grid gap-6 min-w-0 lg:grid-cols-4">
         <PhaseCard id="yritykset" title="Yritysvalta" desc="Yritykset, hallitukset, omistus. YTJ- ja PRH-käsittely tulossa (vaihe B)." />

@@ -22,6 +22,7 @@ import {
 import Avatar from "@/components/Avatar";
 import PoliticianMediaCoverage from "@/components/journalism/PoliticianMediaCoverage";
 import { IdentityBackgroundSection } from "@/components/journalism/IdentityBackgroundSection";
+import PersonBenefitsSection from "@/components/PersonBenefitsSection";
 import { ConfidenceBadge } from "@/components/badges";
 import { sourceTypeLabel } from "@/components/SourceLink";
 import GraphView from "@/components/LazyGraphView";
@@ -193,6 +194,8 @@ export default async function PersonPage({ params }: { params: Promise<{ slug: s
       <PoliticianMediaCoverage personEntityId={entity.id} />
 
       <IdentityBackgroundSection personEntityId={entity.id} />
+
+      <PersonBenefitsSection personEntityId={entity.id} />
 
       {/* network */}
       <section aria-label="Verkosto">

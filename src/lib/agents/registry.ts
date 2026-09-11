@@ -8,6 +8,9 @@ import { sidonnaisuudetAdapter } from "./sidonnaisuudet";
 import { euFtsAdapter } from "./euFts";
 import { euTransparencyAdapter } from "./euTransparency";
 import { vnkOwnershipAdapter } from "./vnkOwnership";
+import { yleAdapter } from "./yle";
+import { awardAdapter } from "./awards";
+import { giftBenefitAdapter } from "./gifts";
 
 const REGISTRY: Record<string, SourceAdapter> = {};
 
@@ -31,6 +34,9 @@ register(sidonnaisuudetAdapter);
 register(euFtsAdapter);
 register(euTransparencyAdapter);
 register(vnkOwnershipAdapter);
+register(yleAdapter);
+register(awardAdapter);
+register(giftBenefitAdapter);
 
 export const SCHEDULES: Record<string, string> = {
   daily: "0 4 * * *", // 04:00 UTC

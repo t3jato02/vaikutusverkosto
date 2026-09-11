@@ -12,6 +12,12 @@
 
 export class TransientError extends Error {}
 
+// SSRF guard for every agent fetch (section 32). Agents fetch hard-coded
+// public-data URLs, but the guard stays defensive: loopback, private,
+// link-local, CGNAT and cloud-metadata hosts are always rejected.
+import { assertPublicHttpUrl } from "@/lib/ssrf";
+export { assertPublicHttpUrl };
+
 /** Map a Content-Type charset token to a TextDecoder label. */
 function charsetFromContentType(contentType: string | null): string {
   const m = /charset\s*=\s*"?([\w-]+)"?/i.exec(contentType ?? "");
@@ -42,6 +48,7 @@ async function fetchWithRetry(
   url: string,
   opts: { timeoutMs: number; maxRetries: number; headers: Record<string, string> },
 ): Promise<Response> {
+  assertPublicHttpUrl(url); // SSRF guard (section 32)
   const { timeoutMs, maxRetries, headers } = opts;
   let attempt = 0;
   for (;;) {
