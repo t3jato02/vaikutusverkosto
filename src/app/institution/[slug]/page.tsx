@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { resolveEntityBySlug } from "@/lib/queries";
+import { notFound, redirect } from "next/navigation";
+import { resolveEntityBySlug, entityUrlFor } from "@/lib/queries";
 import OrganizationProfile from "../../organization/_shared/OrganizationProfile";
 
 export const dynamic = "force-dynamic";
@@ -18,5 +18,9 @@ export default async function InstitutionPage({ params }: { params: Promise<{ sl
   const { slug } = await params;
   const entity = await resolveEntityBySlug(slug);
   if (!entity) notFound();
+  // Media organisations have their own canonical profile route.
+  if (entity.type === "MEDIA_ORGANIZATION") {
+    redirect(entityUrlFor(entity.id, entity.type, entity.canonicalName, entity.subtype));
+  }
   return <OrganizationProfile entity={entity} />;
 }

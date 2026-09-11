@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { searchEntities, searchMoney, searchProjects, projectUrlFor } from "@/lib/queries";
 import { entityLabel } from "@/lib/constants";
+import { journalistSubtypeLabel } from "@/lib/journalism";
+import { isJournalistSubtype } from "@/lib/journalism";
 import { formatEur } from "@/lib/format";
 import Avatar from "@/components/Avatar";
 
@@ -46,7 +48,7 @@ export default async function SearchPage({
 
   const grouped = new Map<string, typeof results>();
   for (const r of results) {
-    const key = CATEGORY_ORDER[r.type] ?? "MUUT";
+    const key = r.type === "PERSON" && isJournalistSubtype(r.subtype) ? "TOIMITTAJAT" : CATEGORY_ORDER[r.type] ?? "MUUT";
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(r);
   }
@@ -93,7 +95,9 @@ export default async function SearchPage({
                       )}
                     </span>
                     <span className="shrink-0 text-[11px] text-ink-300">
-                      {entityLabel(r.type as never)} · {r.sourceCount} lähdettä
+                      {r.type === "PERSON" && isJournalistSubtype(r.subtype)
+                        ? `${journalistSubtypeLabel(r.subtype)} · ${r.sourceCount} lähdettä`
+                        : `${entityLabel(r.type as never)} · ${r.sourceCount} lähdettä`}
                     </span>
                   </Link>
                 </li>

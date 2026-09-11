@@ -66,6 +66,42 @@ test.describe("search", () => {
   });
 });
 
+test.describe("media & journalists", () => {
+  test("media hub loads with non-accusatory copy", async ({ page }) => {
+    await page.goto("/media");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByText(/Ketkä kirjoittavat vallankäyttäjistä/)).toBeVisible();
+  });
+
+  test("journalist index lists profiles and filters", async ({ page }) => {
+    await page.goto("/toimittajat");
+    await expect(page.getByText("TOIMITTAJAT")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Mikael Shepelenko/ }).first()).toBeVisible();
+  });
+
+  test("journalist deep link shows production analysis with trust layer", async ({ page }) => {
+    await page.goto("/search?q=Shepelenko");
+    const link = page.getByRole("link", { name: /Mikael Shepelenko/ }).first();
+    const href = await link.getAttribute("href");
+    expect(href).toBeTruthy();
+    await page.goto(href!);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Shepelenko");
+    await expect(page.getByRole("heading", { name: "Journalistinen tuotanto" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Puolueiden käsittely" }).first()).toBeVisible();
+    await expect(page.getByText(/Sisältöanalyysi ei osoita toimittajan/)).toBeVisible();
+  });
+
+  test("media profile shows ownership + journalists", async ({ page }) => {
+    await page.goto("/search?q=Iltalehti");
+    const link = page.getByRole("link", { name: /Iltalehti/ }).first();
+    const href = await link.getAttribute("href");
+    await page.goto(href ?? "/media");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Iltalehti");
+    await expect(page.getByText(/Julkinen omistaja/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Toimittajat" })).toBeVisible();
+  });
+});
+
 test.describe("person profile", () => {
   test("deep link to an MP profile works", async ({ page }) => {
     // Resolve a real person slug from search.

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import type { EntityType, RelationshipType } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { publicVisibleWhere } from "@/lib/verification";
+import { isJournalistSubtype } from "@/lib/journalism";
 
 // ---------------------------------------------------------------- entity lookups
 
@@ -41,6 +42,7 @@ export async function resolveEntityBySlug(slug: string) {
 export interface SearchResultGroup {
   id: string;
   type: string;
+  subtype: string | null;
   label: string;
   entityType: EntityType | null;
   canonicalName: string;
@@ -69,6 +71,7 @@ export async function searchEntities(q: string, limit = 25): Promise<SearchResul
     select: {
       id: true,
       type: true,
+      subtype: true,
       canonicalName: true,
       description: true,
       sourceCount: true,
@@ -98,11 +101,12 @@ export async function searchEntities(q: string, limit = 25): Promise<SearchResul
     return {
       id: e.id,
       type: e.type,
+      subtype: e.subtype,
       label: e.type,
       entityType: e.type,
       canonicalName: e.canonicalName,
       subtitle: subtitle ?? "",
-      url: entityUrlFor(e.id, e.type, e.canonicalName),
+      url: entityUrlFor(e.id, e.type, e.canonicalName, e.subtype),
       score: e.sourceCount ?? 0,
       sourceCount: e.sourceCount,
     };
@@ -141,8 +145,8 @@ export async function getPersonProfile(entityId: string) {
     db.relationship.findMany({
       where: { OR: [{ sourceEntityId: entityId }, { targetEntityId: entityId }], ...publicVisibleWhere },
       include: {
-        sourceEntity: { select: { id: true, canonicalName: true, type: true } },
-        targetEntity: { select: { id: true, canonicalName: true, type: true } },
+        sourceEntity: { select: { id: true, canonicalName: true, type: true, subtype: true } },
+        targetEntity: { select: { id: true, canonicalName: true, type: true, subtype: true } },
         evidence: { include: { source: true } },
       },
       orderBy: [{ startDate: "desc" }, { updatedAt: "desc" }],
@@ -159,7 +163,7 @@ export async function getPersonProfile(entityId: string) {
     }),
     db.position.findMany({
       where: { personEntityId: entityId },
-      include: { source: true, organizationEntity: { select: { id: true, canonicalName: true, type: true } } },
+      include: { source: true, organizationEntity: { select: { id: true, canonicalName: true, type: true, subtype: true } } },
       orderBy: [{ isCurrent: "desc" }, { startDate: "desc" }],
     }),
     db.event.findMany({
@@ -224,8 +228,8 @@ export async function getEntityGraph(entityId: string, opts: GraphQueryOptions =
     const batch = await db.relationship.findMany({
       where: relWhere,
       include: {
-        sourceEntity: { select: { id: true, canonicalName: true, type: true } },
-        targetEntity: { select: { id: true, canonicalName: true, type: true } },
+        sourceEntity: { select: { id: true, canonicalName: true, type: true, subtype: true } },
+        targetEntity: { select: { id: true, canonicalName: true, type: true, subtype: true } },
         evidence: { select: { id: true, source: { select: { sourceUrl: true, sourceName: true } } } },
       },
       take: 400,
@@ -321,7 +325,7 @@ export async function getMoneyAggregates() {
 const BULK_CHANGE_TYPES = ["NEW_GRANT", "NEW_CONTRACT", "ENTITY_UPDATED"] as const;
 
 export async function getRecentChanges(limit = 30) {
-  const ent = { select: { id: true, canonicalName: true, type: true } } as const;
+  const ent = { select: { id: true, canonicalName: true, type: true, subtype: true } } as const;
   const include = {
     entity: ent,
     relationship: {
@@ -478,32 +482,47 @@ export async function getStats() {
 
 // ---------------------------------------------------------------- url helper
 
-export function entityUrlFor(id: string, type: EntityType, name: string): string {
-  const slug = name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ä/g, "a")
-    .replace(/ö/g, "o")
-    .replace(/å/g, "a")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "entity";
-  const prefix =
-    type === "PERSON"
-      ? "/person"
-      : type === "COMPANY"
-        ? "/company"
-        : type === "POLITICAL_PARTY" ||
-            type === "GOVERNMENT_BODY" ||
-            type === "PUBLIC_AUTHORITY" ||
-            type === "MEDIA_ORGANIZATION" ||
-            type === "EDUCATIONAL_INSTITUTION" ||
-            type === "COURT" ||
-            type === "PENSION_INSTITUTION"
-          ? "/institution"
-          : "/organization";
-  return `${prefix}/${slug}-${id.slice(0, 8)}`;
+/** Two-letter slug fragment for an entity name (shared with profile routes). */
+export function slugifyName(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/ä/g, "a")
+      .replace(/ö/g, "o")
+      .replace(/å/g, "a")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "entity"
+  );
+}
+
+/**
+ * Canonical public URL for an entity.
+ *  - journalist persons (subtype in JOURNALIST_SUBTYPES) -> /toimittajat/<slug>
+ *  - MEDIA_ORGANIZATION -> /media/<slug>
+ * When `subtype` is unknown the generic route is returned; legacy routes
+ * (/person, /institution) 307-redirect to these canonical routes internally.
+ */
+export function entityUrlFor(id: string, type: EntityType, name: string, subtype?: string | null): string {
+  const slug = `${slugifyName(name)}-${id.slice(0, 8)}`;
+  let prefix: string;
+  if (type === "PERSON" && subtype && isJournalistSubtype(subtype)) prefix = "/toimittajat";
+  else if (type === "PERSON") prefix = "/person";
+  else if (type === "COMPANY") prefix = "/company";
+  else if (
+    type === "POLITICAL_PARTY" ||
+    type === "GOVERNMENT_BODY" ||
+    type === "PUBLIC_AUTHORITY" ||
+    type === "EDUCATIONAL_INSTITUTION" ||
+    type === "COURT" ||
+    type === "PENSION_INSTITUTION"
+  )
+    prefix = "/institution";
+  else if (type === "MEDIA_ORGANIZATION") prefix = "/media";
+  else prefix = "/organization";
+  return `${prefix}/${slug}`;
 }
 
 // ---------------------------------------------------------------- projects

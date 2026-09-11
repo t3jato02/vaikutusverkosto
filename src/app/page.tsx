@@ -57,6 +57,23 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <section aria-label="Tutki myös mediaa">
+        <div className="card-pad flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-2xl">
+            <h2 className="text-lg font-bold tracking-tight text-ink-900">Tutki myös mediaa</h2>
+            <p className="mt-1 text-sm leading-relaxed text-ink-500">
+              Katso, ketkä kirjoittavat vallankäyttäjistä, missä medioissa he työskentelevät, millaisista aiheista he
+              kirjoittavat ja millaisia julkisesti dokumentoituja yhteyksiä media-alan toimijoilla on. Kaikki
+              lähdeperusteista — ei arvioita.
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Link href="/media" className="btn-primary">Toimittajat & media</Link>
+            <Link href="/toimittajat" className="btn">Toimittajat</Link>
+          </div>
+        </div>
+      </section>
+
       <section aria-label="Viimeisimmät varmennetut muutokset">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="card-title">VIIMEISIMMÄT VARMENNETUT MUUTOKSET</h2>

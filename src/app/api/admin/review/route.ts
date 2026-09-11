@@ -4,12 +4,14 @@ import {
   reviewRelationship,
   reviewResolutionCandidate,
   reviewCorrection,
+  reviewAffiliation,
   promoteCandidate,
   rejectCandidate,
   resolveSourceConflict,
   type RelationshipReviewAction,
   type CandidateReviewAction,
 } from "@/lib/review";
+import { reviewIdentityFact, type IdentityFactTable, type IdentityReviewAction } from "@/lib/analysis/identity/review";
 
 // Admin-only (middleware). One endpoint for every review action; form posts
 // from /admin/review land here and redirect back.
@@ -29,6 +31,7 @@ export async function POST(req: Request) {
   const action = String(form.get("action") ?? "");
   const note = String(form.get("note") ?? "").trim() || undefined;
   const entityId = String(form.get("entityId") ?? "").trim() || undefined;
+  const table = String(form.get("table") ?? "").trim() || undefined;
   // Keyboard-driven review panel posts with mode=json and wants a JSON reply,
   // not a 303 back to the page.
   const wantsJson = String(form.get("mode") ?? "") === "json";
@@ -58,6 +61,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "bad_action" }, { status: 400 });
     }
     result = await reviewCorrection(id, action as "investigate" | "resolve" | "dismiss" | "dispute", note);
+  } else if (target === "affiliation") {
+    if (!["approve", "reject", "dispute"].includes(action)) {
+      return NextResponse.json({ error: "bad_action" }, { status: 400 });
+    }
+    result = await reviewAffiliation(id, action as "approve" | "reject" | "dispute", note);
+  } else if (target === "identity_fact") {
+    const tables: IdentityFactTable[] = ["birth_origin", "citizenship", "residence", "self_identification", "identity_mention"];
+    if (!tables.includes(table as IdentityFactTable)) {
+      return NextResponse.json({ error: "bad_table" }, { status: 400 });
+    }
+    if (!["approve", "reject", "dispute"].includes(action)) {
+      return NextResponse.json({ error: "bad_action" }, { status: 400 });
+    }
+    result = await reviewIdentityFact(table as IdentityFactTable, id, action as IdentityReviewAction, note);
   } else {
     return NextResponse.json({ error: "bad_target" }, { status: 400 });
   }

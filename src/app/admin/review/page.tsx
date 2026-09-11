@@ -7,6 +7,7 @@ import { relationshipPhrase, temporalLabel, verificationLabel } from "@/lib/labe
 import { formatDateLong } from "@/lib/format";
 import CandidateReviewPanel, { type ReviewCandidate } from "@/components/admin/CandidateReviewPanel";
 import type { RelationshipType } from "@prisma/client";
+import { listIdentityReviewQueue } from "@/lib/analysis/identity/review";
 
 /** Build the rich per-candidate context the review panel renders. */
 async function buildReviewCandidates(
@@ -120,7 +121,7 @@ function ActionForm({
 }
 
 export default async function AdminReviewPage() {
-  const [candidates, relCandidates, autoRels, disputed, corrections, audit] = await Promise.all([
+  const [candidates, relCandidates, autoRels, disputed, corrections, audit, affiliations] = await Promise.all([
     db.entityResolutionCandidate.findMany({ where: { status: "PENDING" }, orderBy: { createdAt: "asc" }, take: 50 }),
     db.relationshipCandidate.findMany({
       where: { status: { in: ["PENDING", "NEEDS_REVIEW", "AUTO_ACCEPTABLE"] } },
@@ -152,9 +153,19 @@ export default async function AdminReviewPage() {
       include: { entity: { select: { id: true, canonicalName: true, type: true } } },
     }),
     db.reviewAction.findMany({ orderBy: { createdAt: "desc" }, take: 30 }),
+    db.politicalAffiliation.findMany({
+      where: { reviewStatus: "PENDING_REVIEW" },
+      orderBy: { createdAt: "asc" },
+      take: 30,
+      include: {
+        personEntity: { select: { id: true, canonicalName: true } },
+        partyEntity: { select: { id: true, canonicalName: true } },
+      },
+    }),
   ]);
   const conflicts = await db.sourceConflict.findMany({ where: { status: "OPEN" }, orderBy: { createdAt: "asc" }, take: 30 });
   const reviewCandidates = await buildReviewCandidates(relCandidates);
+  const identityQueue = await listIdentityReviewQueue(60);
 
   return (
     <div className="space-y-8">
@@ -284,6 +295,84 @@ export default async function AdminReviewPage() {
           </ul>
         </section>
       )}
+
+      <section aria-label="Poliittiset sidokset">
+        <h2 className="card-title mb-2">POLIITTISET SIDOKSET ODOTTAA TARKISTUSTA ({affiliations.length})</h2>
+        <p className="mb-2 text-[11px] text-ink-500">
+          Vain tarkastaja voi julkaista puoluesidoksen (reviewStatus=PUBLISHED, verification=HUMAN_VERIFIED).
+          Agentti ei voi laittaa näitä tilaan HUMAN_VERIFIED eikä sisältöanalyysi voi tuottaa näitä rivejä ollenkaan.
+        </p>
+        <ul className="card divide-y divide-ink-100">
+          {affiliations.length === 0 && <li className="py-3 text-sm text-ink-500">Ei odottavia sidoksia.</li>}
+          {affiliations.map((a) => (
+            <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
+              <div className="min-w-0">
+                <span className="font-semibold text-ink-900">{a.personEntity.canonicalName}</span>
+                <span className="text-ink-500"> · {a.affiliationType}</span>
+                {a.partyEntity ? <span className="text-ink-500"> · {a.partyEntity.canonicalName}</span> : null}
+                {a.role ? <span className="text-ink-500"> · {a.role}</span> : null}
+                <p className="text-ink-400">
+                  {a.startYear ?? "?"}–{a.endYear ?? "?"} · {a.selfReported ? "henkilön itsensä ilmoittama" : "dokumentoitu"} ·{" "}
+                  <a href={a.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">lähde</a> · {a.description.slice(0, 90)}
+                </p>
+              </div>
+              <ActionForm
+                target="affiliation"
+                id={a.id}
+                actions={[
+                  { value: "approve", label: "Julkaise (HUMAN_VERIFIED)" },
+                  { value: "dispute", label: "Riitauta" },
+                  { value: "reject", label: "Hylkää" },
+                ]}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section aria-label="Syntymämaa- ja identiteettitiedot">
+        <h2 className="card-title mb-2">SYNTYMÄMAA- JA IDENTITEETTITIEDOT ODOTTAA TARKISTUSTA ({identityQueue.length})</h2>
+        <p className="mb-2 text-[11px] text-ink-500">
+          Syntymämaa, kansalaisuus, asuinmaa, henkilön oma identiteetti ja media-ilmaukset.
+          Julkaisu vaatii aina ihmisen tarkistuksen — epävarmaa henkilötason väitettä ei julkaista
+          faktana. Media-ilmaukset säilyvät sanatarkasti.
+        </p>
+        <ul className="card divide-y divide-ink-100">
+          {identityQueue.length === 0 && <li className="py-3 text-sm text-ink-500">Ei odottavia identiteettitietoja.</li>}
+          {identityQueue.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs">
+              <div className="min-w-0">
+                <span className="rounded bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase">{c.label}</span>{" "}
+                <span className="font-semibold text-ink-900">{c.personName}</span>
+                <span className="text-ink-500"> — {c.value}</span>
+                {c.detail && <p className="text-ink-400">{c.detail}</p>}
+                <p className="text-ink-300">
+                  lähde:{" "}
+                  {c.sourceUrl ? (
+                    <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                      {c.sourceName ?? c.sourceUrl}
+                    </a>
+                  ) : (
+                    <span>{c.sourceName}</span>
+                  )}
+                  {c.evidenceGrade ? ` · Lähde ${c.evidenceGrade}` : ""}
+                  {c.confidence ? ` · luottamus ${c.confidence}` : ""} · {formatDateLong(c.createdAt)}
+                </p>
+              </div>
+              <form action="/api/admin/review" method="post" className="flex flex-wrap items-center gap-1.5">
+                <input type="hidden" name="target" value="identity_fact" />
+                <input type="hidden" name="table" value={c.table} />
+                <input type="hidden" name="id" value={c.id} />
+                {["approve", "dispute", "reject"].map((a) => (
+                  <button key={a} name="action" value={a} className="btn px-2 py-0.5 text-[11px]">
+                    {a === "approve" ? "Julkaise" : a === "dispute" ? "Riitauta" : "Hylkää"}
+                  </button>
+                ))}
+              </form>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section aria-label="Korjauspyynnöt">
         <h2 className="card-title mb-2">KORJAUSPYYNNÖT</h2>

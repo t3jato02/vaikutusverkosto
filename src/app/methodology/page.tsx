@@ -255,6 +255,131 @@ export default function MethodologyPage() {
         </p>
       </Section>
 
+      <Section id="media" title="Media ja toimittajat">
+        <p>
+          Toimittajat ja mediat ovat ensimmäisen luokan toimijoita. Toimittajan rooli (subtype) on
+          <strong>ammatillinen luokittelu</strong>, ei poliittinen kanta. Medialla on oma profiili:
+          omistus, rahoitusmalli, JSN-jäsenyys ja — vain dokumentoidulla lähteellä — institutionaalinen
+          suhde, joka pidetään erillään yksittäisten toimittajien henkilökohtaisista näkemyksistä.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Median institutionaalista taustaa ei koskaan siirretä toimittajalle.</strong> Se on
+            median omistama ominaisuus.
+          </li>
+          <li>
+            <strong>Toimittajan kirjoittaminen poliitikosta on havaittua julkaisudataa</strong>, ei
+            henkilökohtainen suhde. Graafissa ei luoda henkilösuhdetta pelkän kirjoituksen perusteella.
+          </li>
+          <li>
+            <strong>Puolueosio nousi vain tarkasteltavasta aineistosta</strong> — laaja korpus ei vielä
+            valmistu automaattisesti; ajankohtainen korpus on kontrolloitu pilotti.
+          </li>
+        </ul>
+      </Section>
+
+      <Section id="content-analysis" title="Sisältöanalyysi (puolueiden käsittely)">
+        <p>
+          Tämä ominaisuus on <strong>data-analyysi</strong>: se laskee julkisesta
+          artikkeimetadataosesta, kuinka usein ja missä juttutyypeissä kutakin puoluetta tai
+          poliitikkoa on käsitelty. Tulokset ovat havaittuja jakaumia:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>artikkelimäärä ja politiikka-aiheinen osuus</li>
+          <li>puoluekohtainen näkyvyys (maininnat otsikossa/jutussa) ja sen osuus</li>
+          <li>poliitikkokohtainen käsittely</li>
+          <li>juttutyyppijakauma (uutinen / analyysi / kolumni / kommentti / mielipide / tutkiva / haastattelu)</li>
+          <li>aihe- ja lähdetyyppijakaumat</li>
+        </ul>
+        <p className="mt-2">
+          <strong>Jokaisella tuloksella näytetään</strong>: analyysimenetelmä (algoritmiversio),
+          aineiston koko, aikaväli, luotettavuus/coverage ja rajoitteet. Tulokset on merkitty
+          <em> automaattinen analyysi (◐)</em>.
+        </p>
+        <p className="mt-2">
+          <strong>Kehystys (positiivinen/neutraali/kriittinen) on automaattinen leksikonarvio</strong>.
+          Se on epätarkka ja se näytetään vain selitteen
+          &ldquo;Sisältöanalyysi ei osoita toimittajan henkilökohtaista poliittista mielipidettä&rdquo;.
+          Järjestelmä ei koskaan muuta jakaumaa kentäksi &ldquo;puoluekanta = X&rdquo; tai
+          &ldquo;vasemmistolainen&rdquo;.
+        </p>
+      </Section>
+
+      <Section id="evidence-grades" title="Evidence-luokat (A–E)">
+        <p>
+          Jokainen merkittävä väite kantaa evidenssiluokan, joka kertoo lähteen vahvuudesta:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li><strong>A</strong> — ensisijainen/virallinen lähde (rekisteri, viranomainen, päätösasiakirja)</li>
+          <li><strong>B</strong> — vahva journalistinen tai institutionaalinen lähde</li>
+          <li><strong>C</strong> — usean riippumattoman lähteen vahvistama</li>
+          <li><strong>D</strong> — yksi sekundäärinen lähde</li>
+          <li><strong>E</strong> — vahvistamaton; ei näytetä julkisessa näkymässä faktana</li>
+        </ul>
+        <p className="mt-2">
+          Kutakin väitettä voi klikata auki: <strong>mitä väitetään, mihin väite perustuu, lähde,
+          lähteen päivämäärä, tarkistusaika, evidenssitaso, mahdollinen ristiriitainen lähde ja
+          onko tieto ajankohtainen vai historiallinen</strong>.
+        </p>
+      </Section>
+
+      <Section id="relations-media" title="Journalismin suhteiden säännöt">
+        <p>
+          Journalistin ja median välillä käytetään vain tarkkoja relaatioita:
+          <code> WORKS_FOR / WORKED_FOR / EDITOR_OF / EDITOR_IN_CHIEF_OF / OWNED_BY /
+          PUBLISHES / PART_OF_MEDIA_GROUP / FOUNDED</code>. Ajallisuus on pakollinen: päättynyttä
+          työsuhdetta ei näytetä &ldquo;työskentelee&rdquo;-muodossa.
+        </p>
+        <p className="mt-2">
+          Artikkelimaininta (<code>WROTE_ABOUT, CITED, INTERVIEWED</code>) on eri asia kuin
+          henkilösuhde (<code>WORKED_FOR, POLITICAL_AIDE_TO, PERSONAL_RELATIONSHIP</code>).
+          Henkilösuhde vaatii suoran lainauksen tai eksplisiittisen lähteen; pelkkä maininta ei riitä.
+        </p>
+      </Section>
+
+      <Section id="pilot-corpus" title="Pilottikorpus">
+        <p>
+          Toimittajien ja medioiden tuotantoanalyysi toimii tällä hetkellä <strong>kontrolloidulla
+          pilottikorpuksella</strong>: rajattu määrä mediaa ja toimittajia ja rajattu otos oikeita
+          julkistettuja artikkeleita (otsikko + URL + ajankohta luettu median omasta syötteestä).
+          Pilotti on tarkoitettu QA:ta varten ennen laajempaa käsittelyä; kirjoittajakytkennät on
+          pilottivaiheessa rajoitettuja (byline luettu, kun se on ollut saatavissa).
+        </p>
+      </Section>
+
+      <Section id="identity-framing" title="Syntymämaa, kansalaisuus ja mediaidentiteetti">
+        <p>
+          Tämä kerros tekee näkyväksi, miten suomalainen media kuvaa ihmisten kansallisuutta, syntyperää,
+          kansalaisuutta ja paikallisuutta. Se on <strong>faktapohjainen</strong> eikä ideologinen
+          luokittelija. Alkuperäinen lähdetieto, juridinen status, median käyttämä ilmaisu ja järjestelmän
+          analyysi ovat erillisiä asioita, joita ei yhdistetä yhdeksi &quot;nationaliteetti&quot;-kentäksi.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li><strong>Syntymämaa on muuttumaton historiallinen tietokenttä.</strong> Se ei muutu muuton, asumisen, kansalaisuuden tai kaksoiskansalaisuuden myötä — eikä sitä kirjoiteta kansalaisuudeksi.</li>
+          <li><strong>Kansalaisuus on erillinen juridinen status.</strong> Se voi olla yksi, useita tai ei tiedossa; saavuusvuosi tallennetaan, jos se on dokumentoitu.</li>
+          <li><strong>Asuinpaikka on erillinen muuttuva tieto.</strong> Syntymämaa ≠ asuinmaa ≠ kansalaisuus.</li>
+          <li><strong>Henkilön oma identiteetti on erillinen tieto</strong>, tallennettu vain eksplisiittisestä julkisesta lähteestä, sanatarkasti.</li>
+          <li><strong>Median käyttämä nimitys on toimituksellinen havainto</strong> — säilytetään sanatarkasti ja kontekstin kanssa, eikä se ole henkilön ominaisuus.</li>
+        </ul>
+        <p className="mt-2">
+          Järjestelmä <strong>ei päättele</strong> syntymämaata, syntyperää, etnisyyttä, uskontoa, kansalaisuutta
+          tai maahanmuuttajataustaa nimestä, kielestä, kuvasta tai ulkonäöstä. Jos tietoa ei ole, tulos on{" "}
+          <em>&quot;Ei vahvistettua tietoa&quot;</em> — ei tekoälyn arvaus. Järjestelmä ei muuta syntymämaata
+          kansalaisuudeksi eikä päinvastoin.
+        </p>
+        <p className="mt-2">
+          Media-analyysi <strong>mittaa sanastoa</strong> eikä oleta puolueellisuutta etukäteen: se kerää
+          aineiston (media, toimittaja, vuosi, aihe, henkilön dokumentoidut taustamuuttujat) ja näyttää erot
+          vain, jos ne ovat aineistossa. Negatiivinen uutinen henkilöstä ei ole ryhmäkohtainen asenne, eikä
+          positiivinen uutinen ole poliittista suosimista. <strong>Sanavalinta ei ole sentimenttiä.</strong>
+        </p>
+        <p className="mt-2">
+          Kaikki henkilötason faktat kantavat provenance-tiedot: lähde-URL, julkaisija, julkaisupäivä, noutoaika,
+          tarkka ote, evidenssiluokka (A–E), luottamus ja tarkistustila. Media-ilmaukset (ja niiden luokittelu)
+          ovat versioituja ja uudelleenlaskettavissa; epävarma luokittelu menee tarkistusjonoon.
+        </p>
+      </Section>
+
       <Section id="corrections" title="Korjauskäytäntö">
         <p>
           Jokaisella profiililla on &ldquo;Ilmoita virheestä&rdquo;. Korjaukset käsitellään avoimesti,
