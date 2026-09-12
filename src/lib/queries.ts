@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
-import type { EntityType, RelationshipType } from "@prisma/client";
+import type { EntityType, RelationshipType, InstitutionalCategory } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { publicVisibleWhere } from "@/lib/verification";
 import { isJournalistSubtype } from "@/lib/journalism";
+import { institutionalCategoryLabel } from "@/lib/constants";
 
 // ---------------------------------------------------------------- entity lookups
 
@@ -45,6 +46,7 @@ export interface SearchResultGroup {
   subtype: string | null;
   label: string;
   entityType: EntityType | null;
+  institutionalCategory: InstitutionalCategory | null;
   canonicalName: string;
   subtitle: string;
   url: string;
@@ -78,6 +80,7 @@ export async function searchEntities(q: string, limit = 25): Promise<SearchResul
       updatedAt: true,
       person: { select: { electoralDistrict: true, partyEntityId: true } },
       organization: { select: { headquarters: true } },
+      institutionalCategories: { select: { category: true }, take: 1 },
     },
   });
   const t = term.toLowerCase();
@@ -98,12 +101,17 @@ export async function searchEntities(q: string, limit = 25): Promise<SearchResul
       e.person?.electoralDistrict ??
       e.organization?.headquarters ??
       (e.description ? e.description.slice(0, 90) : "");
+    // Distinguish institutional types (ministeriö, virasto, kunta, ...) in
+    // search results via the documented institutional category when present.
+    const category = e.institutionalCategories?.[0]?.category;
+    const label = category ? institutionalCategoryLabel(category, "fi") : e.type;
     return {
       id: e.id,
       type: e.type,
       subtype: e.subtype,
-      label: e.type,
+      label,
       entityType: e.type,
+      institutionalCategory: category ?? null,
       canonicalName: e.canonicalName,
       subtitle: subtitle ?? "",
       url: entityUrlFor(e.id, e.type, e.canonicalName, e.subtype),

@@ -1,4 +1,4 @@
-import { EntityType, RelationshipType, FlowType, Confidence, ChangeEventType, FundingType, RoleType, Sector, CriticalFunction, ProcurementProcedure, OwnershipCalculationStatus } from "@prisma/client";
+import { EntityType, RelationshipType, FlowType, Confidence, ChangeEventType, FundingType, RoleType, Sector, CriticalFunction, ProcurementProcedure, OwnershipCalculationStatus, InstitutionalCategory } from "@prisma/client";
 
 type Label = { fi: string; en: string; sv?: string };
 
@@ -288,6 +288,40 @@ export const OWNERSHIP_CALCULATION_STATUS_LABELS: Record<OwnershipCalculationSta
   UNKNOWN: { fi: "Tarkkuus ei tiedossa", en: "Precision unknown" },
 };
 
+// Structural institutional categories (public-institutions stream). A category
+// is a descriptive fact about what an organisation IS — never an influence or
+// ideology signal.
+export const INSTITUTIONAL_CATEGORY_LABELS: Record<InstitutionalCategory, Label> = {
+  MINISTRY: { fi: "Ministeriö", en: "Ministry" },
+  PRIME_MINISTERS_OFFICE: { fi: "Valtioneuvoston kanslia", en: "Prime Minister's Office" },
+  AGENCY: { fi: "Virasto", en: "Agency" },
+  AUTHORITY: { fi: "Viranomainen", en: "Authority" },
+  STATE_ENTERPRISE: { fi: "Valtion liikelaitos", en: "State enterprise" },
+  STATE_OWNED_COMPANY: { fi: "Valtion omistama yhtiö", en: "State-owned company" },
+  STATE_SPECIAL_ASSIGNMENT_COMPANY: { fi: "Valtion erityistehtäväyhtiö", en: "State special-assignment company" },
+  STATE_INVESTMENT_COMPANY: { fi: "Valtion sijoitusyhtiö", en: "State investment company" },
+  PUBLIC_FINANCING_INSTITUTION: { fi: "Julkinen rahoituslaitos", en: "Public financing institution" },
+  STATE_FUND: { fi: "Valtion rahasto", en: "State fund" },
+  MUNICIPALITY: { fi: "Kunta", en: "Municipality" },
+  WELLBEING_SERVICES_COUNTY: { fi: "Hyvinvointialue", en: "Wellbeing services county" },
+  MUNICIPAL_OWNED_COMPANY: { fi: "Kunnan omistama yhtiö", en: "Municipal-owned company" },
+  REGIONAL_COUNCIL: { fi: "Maakunnan liitto", en: "Regional council" },
+  NGO: { fi: "Kansalaisjärjestö", en: "NGO" },
+  FOUNDATION: { fi: "Säätiö", en: "Foundation" },
+  ASSOCIATION: { fi: "Yhdistys", en: "Association" },
+  EMPLOYER_ORGANIZATION: { fi: "Työnantajajärjestö", en: "Employer organisation" },
+  TRADE_UNION: { fi: "Ammattiliitto", en: "Trade union" },
+  PROFESSIONAL_ORGANIZATION: { fi: "Ammatillinen järjestö", en: "Professional organisation" },
+  LABOUR_MARKET_CENTRAL_ORGANIZATION: { fi: "Työmarkkinoiden keskusjärjestö", en: "Labour-market central organisation" },
+  INDUSTRY_ASSOCIATION: { fi: "Toimialajärjestö", en: "Industry association" },
+  CHAMBER_OF_COMMERCE: { fi: "Kauppakamari", en: "Chamber of commerce" },
+  WORKING_GROUP: { fi: "Työryhmä", en: "Working group" },
+  ADVISORY_BODY: { fi: "Neuvottelukunta", en: "Advisory body" },
+  COMMISSION: { fi: "Komissio", en: "Commission" },
+  COUNCIL: { fi: "Neuvosto", en: "Council" },
+  OTHER: { fi: "Muu institutionaalinen tyyppi", en: "Other institutional type" },
+};
+
 export function roleTypeLabel(type: RoleType | string | null | undefined, lang: "fi" | "en" = "fi"): string {
   return ROLE_TYPE_LABELS[type as RoleType]?.[lang] ?? String(type ?? "").toLowerCase();
 }
@@ -302,6 +336,10 @@ export function criticalFunctionLabel(type: CriticalFunction | string | null | u
 
 export function procurementProcedureLabel(type: ProcurementProcedure | string | null | undefined, lang: "fi" | "en" = "fi"): string {
   return PROCUREMENT_PROCEDURE_LABELS[type as ProcurementProcedure]?.[lang] ?? String(type ?? "").toLowerCase();
+}
+
+export function institutionalCategoryLabel(type: InstitutionalCategory | string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  return INSTITUTIONAL_CATEGORY_LABELS[type as InstitutionalCategory]?.[lang] ?? String(type ?? "").toLowerCase();
 }
 
 export const CHANGE_EVENT_LABELS: Record<ChangeEventType, Label> = {

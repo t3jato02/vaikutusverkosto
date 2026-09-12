@@ -301,6 +301,9 @@ model Entity {
   lobbyingTargetEngagements     LobbyingEngagement[] @relation("LobbyingTarget")
   appointedPositions            Position[] @relation("PositionAppointedBy")
 
+  // Institutional power (public-institutions stream).
+  institutionalCategories       OrganizationInstitutionalCategory[] @relation("InstitutionalCategories")
+
   @@index([canonicalName])
   @@index([type, status])
   @@index([municipality])
@@ -1570,6 +1573,9 @@ model Source {
   procurementContracts        ProcurementContract[] @relation("ProcurementSource")
   lobbyingEngagements         LobbyingEngagement[] @relation("LobbyingSource")
 
+  // Institutional power (public-institutions stream).
+  institutionalCategories     OrganizationInstitutionalCategory[] @relation("InstitutionalCategorySource")
+
   @@unique([sourceUrl])
   @@index([sourceType])
 }
@@ -2290,6 +2296,64 @@ model OrganizationSector {
   @@unique([entityId, sector])
   @@index([sector])
   @@index([entityId, validTo])
+}
+
+// ------------------------------------------------- institutional power (public-institutions stream, section 5/23)
+//
+// InstitutionalCategory: a structural, descriptive institutional type for an
+// organisation (ministry, agency, municipality, wellbeing services county,
+// state enterprise, NGO, foundation, labour-market organisation, ...). A
+// category is a fact about what the organisation IS — never an influence or
+// ideology signal. Multiple categories may be assigned when a public source
+// documents them; each assignment is source-bound and evidence-graded.
+model OrganizationInstitutionalCategory {
+  id           String               @id @default(uuid()) @db.Uuid
+  entityId     String               @db.Uuid
+  entity       Entity               @relation("InstitutionalCategories", fields: [entityId], references: [id], onDelete: Cascade)
+  category     InstitutionalCategory
+  sourceId     String?              @db.Uuid
+  source       Source?              @relation("InstitutionalCategorySource", fields: [sourceId], references: [id], onDelete: SetNull)
+  evidenceGrade EvidenceGrade       @default(C)
+  validFrom    DateTime?            @db.Date
+  validTo      DateTime?            @db.Date
+  createdBy    String? // agent name or "human"
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([entityId, category])
+  @@index([category])
+  @@index([entityId, validTo])
+}
+
+enum InstitutionalCategory {
+  MINISTRY // ministeriö
+  PRIME_MINISTERS_OFFICE // valtioneuvoston kanslia
+  AGENCY // virasto / yleinen viranomainen
+  AUTHORITY // valvova / sääntelevä viranomainen
+  STATE_ENTERPRISE // valtion liikelaitos
+  STATE_OWNED_COMPANY // valtion omistama yhtiö
+  STATE_SPECIAL_ASSIGNMENT_COMPANY // valtion erityistehtäväyhtiö
+  STATE_INVESTMENT_COMPANY // valtion sijoitusyhtiö
+  PUBLIC_FINANCING_INSTITUTION // julkinen rahoituslaitos
+  STATE_FUND // valtion rahasto (esim. Sitra)
+  MUNICIPALITY // kunta
+  WELLBEING_SERVICES_COUNTY // hyvinvointialue
+  MUNICIPAL_OWNED_COMPANY // kunnan omistama yhtiö
+  REGIONAL_COUNCIL // maakunnan liitto
+  NGO // kansalaisjärjestö
+  FOUNDATION // säätiö
+  ASSOCIATION // yhdistys
+  EMPLOYER_ORGANIZATION // työnantajajärjestö
+  TRADE_UNION // ammattiliitto
+  PROFESSIONAL_ORGANIZATION // ammatillinen järjestö
+  LABOUR_MARKET_CENTRAL_ORGANIZATION // työmarkkinoiden keskusjärjestö
+  INDUSTRY_ASSOCIATION // toimialajärjestö
+  CHAMBER_OF_COMMERCE // kauppakamari
+  WORKING_GROUP // työryhmä
+  ADVISORY_BODY // neuvottelukunta / asiantuntijaelin
+  COMMISSION // komissio / toimikunta
+  COUNCIL // neuvosto
+  OTHER
 }
 
 // CriticalFunctionAssignment: a nationally significant function performed by an

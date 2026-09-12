@@ -90,6 +90,9 @@ export function runOptionsFor(sourceId: string): { concurrency: number; maxDocsP
       return { concurrency: 2, maxDocsPerTick: 6 };
     case "gift-benefit-agent":
       return { concurrency: 1, maxDocsPerTick: 4 };
+    case "public-institutions-agent":
+      // Manifest-driven: 3 bounded section documents; each tick is cheap.
+      return { concurrency: 2, maxDocsPerTick: 3 };
     default:
       return { concurrency: 2, maxDocsPerTick: 2 };
   }
