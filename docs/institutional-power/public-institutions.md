@@ -201,7 +201,7 @@ category ("Ministeriö", "Kunta", "Hyvinvointialue", ...) in results.
 - [x] Meaningful state-administration coverage (ministries + agencies + enterprises)
 - [x] Major agencies represented
 - [x] Municipal governance supported (13 major cities)
-- [x] Wellbeing services counties supported (21)
+- [x] Wellbeing services counties supported (20 modelled; Helsinki runs its own services)
 - [x] Major NGOs/foundations supported
 - [x] Labour-market organisations supported
 - [x] Historical/current roles correct (temporal semantics enforced)
@@ -223,12 +223,13 @@ category ("Ministeriö", "Kunta", "Hyvinvointialue", ...) in results.
 | Measure | Count |
 | --- | --- |
 | Organisations with an institutional category | 129 |
-| Persons with documented institutional roles | 306 |
-| Positions (roles) | 324 (319 current / 5 historical) |
+| Persons with documented institutional roles | 308 |
+| Positions (roles) | 326 (320 current / 6 historical) |
 | Government supervision edges (ministry SUPERVISES x) | 22 |
-| Sources created by this stream | ~3 (one per section) |
+| Distinct primary sources referenced | ~187 |
 
 The full cohort spans ministries (13), agencies/authorities (~21), state
 enterprises and state-owned companies (~17), municipalities (13), wellbeing
-services counties (21), foundations/funds (10), NGOs (12), labour-market and
-industry organisations (~23) and formal advisory bodies (3).
+services counties (20; Helsinki runs its own services), foundations/funds (10),
+NGOs (12), labour-market and industry organisations (~23) and formal advisory
+bodies (3).
