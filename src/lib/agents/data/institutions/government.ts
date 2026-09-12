@@ -809,6 +809,11 @@ export const governmentSection: ManifestSection = {
     },
     // ---- Agency heads ----
     {
+      person: "Jyri Häkämies", org: "tyo-ja-elinkeinoministerio", role: "Elinkeinoministeri", roleType: "MINISTER",
+      startDate: "2011-06-22", endDate: "2015-05-29", current: false, appointmentMethod: "APPOINTMENT", appointedBy: "tasavallan-presidentin-kanslia",
+      evidenceUrl: "https://valtioneuvosto.fi/ministerit", sourceName: "Valtioneuvosto (valtioneuvosto.fi/ministerit)", evidenceGrade: "B",
+    },
+    {
       person: "Outi Antila", org: "kela", role: "Pääjohtaja", roleType: "DIRECTOR_GENERAL",
       startDate: "2016-01-01", current: true, appointmentMethod: "APPOINTMENT", appointedBy: "sosiaali-ja-terveysministerio",
       evidenceUrl: "https://www.kela.fi/paajohtaja", sourceName: "Kela (kela.fi)", evidenceGrade: "A",
