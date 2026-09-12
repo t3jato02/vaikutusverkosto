@@ -5,7 +5,7 @@
 // by design; adapters must route writes through this module.
 
 import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, Confidence, EntityStatus, VerificationStatus } from "@prisma/client";
-import type { RunContext, ProposedFact, RoleAssignmentFact, OrganizationSectorFact, CriticalFunctionFact, ProcurementFact, LobbyingFact, EntityRef, BenefitEventFact, StatementItemFact } from "./types";
+import type { RunContext, ProposedFact, RoleAssignmentFact, OrganizationSectorFact, CriticalFunctionFact, ProcurementFact, LobbyingFact, InstitutionalCategoryFact, EntityRef, BenefitEventFact, StatementItemFact } from "./types";
 import { resolveEntity } from "./entityResolution";
 import { confidenceToScore, deriveAgentStatus } from "@/lib/verification";
 import { deriveTemporalState } from "@/lib/temporal";
@@ -579,6 +579,56 @@ export async function publishOrganizationSector(ctx: RunContext, fact: Organizat
     data: {
       entityId: org.id,
       sector: fact.sector,
+      sourceId: source.id,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      validFrom: fact.validFrom ?? null,
+      validTo: fact.validTo ?? null,
+      createdBy: ctx.agentId,
+    },
+  });
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created" };
+  }
+  ctx.stats.candidates++;
+  return { action: "review" };
+}
+
+// ---------------------------------------------------------------- institutional category
+
+export async function publishInstitutionalCategory(ctx: RunContext, fact: InstitutionalCategoryFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.organization?.name) return reject(ctx, "institutional-category without organisation");
+  if (!fact.category) return reject(ctx, "institutional-category without category");
+  if (!fact.evidenceUrl) return reject(ctx, "institutional-category without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+
+  const org = await resolveRequiredEntity(ctx.db, fact.organization);
+  if (org.blocker) return reject(ctx, `organization ${org.blocker}`);
+  const source = await institutionalSource(ctx, fact);
+  const autoPublish = institutionalAutoPublish(fact.extractionMethod, fact.sourceType, fact.confidence);
+
+  const existing = await ctx.db.organizationInstitutionalCategory.findUnique({
+    where: { entityId_category: { entityId: org.id, category: fact.category } },
+  });
+  if (existing) {
+    const changed = (existing.validTo?.getTime() ?? null) !== (fact.validTo?.getTime() ?? null);
+    if (!changed) {
+      await ctx.db.organizationInstitutionalCategory.update({ where: { id: existing.id }, data: { updatedAt: new Date() } });
+      ctx.stats.updated++;
+      return autoPublish ? { action: "unchanged" } : { action: "review" };
+    }
+    await ctx.db.organizationInstitutionalCategory.update({
+      where: { id: existing.id },
+      data: { validTo: fact.validTo ?? null, updatedAt: new Date() },
+    });
+    ctx.stats.updated++;
+    return autoPublish ? { action: "updated" } : { action: "review" };
+  }
+
+  await ctx.db.organizationInstitutionalCategory.create({
+    data: {
+      entityId: org.id,
+      category: fact.category,
       sourceId: source.id,
       evidenceGrade: fact.evidenceGrade ?? "C",
       validFrom: fact.validFrom ?? null,

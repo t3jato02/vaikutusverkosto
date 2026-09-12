@@ -5,10 +5,12 @@ import {
   CRITICAL_FUNCTION_LABELS,
   PROCUREMENT_PROCEDURE_LABELS,
   OWNERSHIP_CALCULATION_STATUS_LABELS,
+  INSTITUTIONAL_CATEGORY_LABELS,
   roleTypeLabel,
   sectorLabel,
   criticalFunctionLabel,
   procurementProcedureLabel,
+  institutionalCategoryLabel,
 } from "@/lib/constants";
 import {
   RoleType,
@@ -16,6 +18,7 @@ import {
   CriticalFunction,
   ProcurementProcedure,
   OwnershipCalculationStatus,
+  InstitutionalCategory,
 } from "@prisma/client";
 
 describe("institutional-power label coverage invariants (foundation)", () => {
@@ -48,6 +51,13 @@ describe("institutional-power label coverage invariants (foundation)", () => {
       expect(OWNERSHIP_CALCULATION_STATUS_LABELS[v]?.fi).toBeTruthy();
     }
   });
+
+  it("every institutional category has a Finnish label (public-institutions stream)", () => {
+    for (const v of Object.values(InstitutionalCategory)) {
+      expect(INSTITUTIONAL_CATEGORY_LABELS[v]?.fi).toBeTruthy();
+      expect(INSTITUTIONAL_CATEGORY_LABELS[v]?.en).toBeTruthy();
+    }
+  });
 });
 
 describe("institutional-power label accessors", () => {
@@ -56,6 +66,9 @@ describe("institutional-power label accessors", () => {
     expect(sectorLabel("ELECTRICITY_TRANSMISSION", "fi")).toBe("Sähkönsiirto");
     expect(criticalFunctionLabel("NATIONAL_GRID", "en")).toBe("National grid");
     expect(procurementProcedureLabel("DIRECT_AWARD", "fi")).toBe("Suorahankinta");
+    expect(institutionalCategoryLabel("MINISTRY", "fi")).toBe("Ministeriö");
+    expect(institutionalCategoryLabel("MUNICIPALITY", "en")).toBe("Municipality");
+    expect(institutionalCategoryLabel("NOT_A_CATEGORY", "fi")).toBe("not_a_category");
     expect(roleTypeLabel("NOT_A_ROLE", "fi")).toBe("not_a_role");
   });
 });

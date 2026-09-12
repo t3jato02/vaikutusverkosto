@@ -1,4 +1,4 @@
-import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, BenefitEventType, ValuePrecision, RoleType, Sector, CriticalFunction, ProcurementProcedure } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, BenefitEventType, ValuePrecision, RoleType, Sector, CriticalFunction, ProcurementProcedure, InstitutionalCategory } from "@prisma/client";
 
 /** Optional project a financial flow funds (Sprint C2). */
 export interface ProjectRef {
@@ -158,6 +158,25 @@ export interface OrganizationSectorFact {
   dedupeKey?: string;
 }
 
+/** A structural institutional category for an organisation (public-institutions stream). */
+export interface InstitutionalCategoryFact {
+  kind: "institutional-category";
+  organization: EntityRef;
+  category: InstitutionalCategory;
+  validFrom?: Date | null;
+  validTo?: Date | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
 /** A critical-function classification, only with a public evidence basis. */
 export interface CriticalFunctionFact {
   kind: "critical-function";
@@ -298,6 +317,7 @@ export type AgentFact =
   | StatementItemFact
   | RoleAssignmentFact
   | OrganizationSectorFact
+  | InstitutionalCategoryFact
   | CriticalFunctionFact
   | ProcurementFact
   | LobbyingFact;
