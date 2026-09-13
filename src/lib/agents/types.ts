@@ -1,4 +1,4 @@
-import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, BenefitEventType, ValuePrecision, RoleType, Sector, CriticalFunction, ProcurementProcedure } from "@prisma/client";
+import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, EntityType, Confidence, BenefitEventType, ValuePrecision, RoleType, Sector, CriticalFunction, ProcurementProcedure, FinanceInstitutionType, ScaleMetricType } from "@prisma/client";
 
 /** Optional project a financial flow funds (Sprint C2). */
 export interface ProjectRef {
@@ -291,6 +291,80 @@ export interface StatementItemFact {
   dedupeKey: string;
 }
 
+/** A source-bound finance-institution profile (finance stream). */
+export interface FinanceInstitutionFact {
+  kind: "finance-institution";
+  organization: EntityRef;
+  institutionType: FinanceInstitutionType;
+  /** FIN-FSA register id when the institution is supervised. */
+  finFsaRegistrationId?: string | null;
+  /** GLEIF Legal Entity Identifier. */
+  lei?: string | null;
+  /** SWIFT/BIC code. */
+  bic?: string | null;
+  officialUrl?: string | null;
+  /** Additional documented names (GLEIF aliases, trading names, translations). */
+  aliases?: string[] | null;
+  validFrom?: Date | null;
+  validTo?: Date | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** A year-bound institutional scale figure (AUM, balance sheet, revenue…) from
+ *  the organisation's own report. Year + source are always stored; the figure
+ *  is institutional and never projected onto individuals. */
+export interface ScaleStatementFact {
+  kind: "scale-statement";
+  entity: EntityRef;
+  metricType: ScaleMetricType;
+  value: number;
+  currency: string;
+  year: number;
+  /** Optional free-text note on what the figure covers (e.g. "konserni"). */
+  note?: string | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
+/** A strong external identifier mapping (LEI, BIC, exchange symbol, register id…).
+ *  Used by the GLEIF resolver and by the finance stream's listed-issuer marker
+ *  so cross-stream resolution stays deterministic. Never merges on name. */
+export interface ExternalIdentifierFact {
+  kind: "external-identifier";
+  entity: EntityRef;
+  provider: string; // e.g. "gleif-lei", "swift-bic", "nasdaq-issuer", "fin-fsa"
+  identifier: string;
+  /** Additional documented names for the entity (GLEIF aliases, trading names). */
+  aliases?: string[] | null;
+  confidence: Confidence;
+  evidenceUrl: string;
+  evidenceTitle?: string | null;
+  sourceType: SourceType;
+  sourceName: string;
+  publisher: string;
+  extractionMethod?: "deterministic-parser" | "rule" | "llm" | "manual";
+  extractorVersion?: string;
+  evidenceGrade?: "A" | "B" | "C" | "D" | "E";
+  dedupeKey?: string;
+}
+
 /** Every fact kind an adapter may propose. */
 export type AgentFact =
   | NormalizedFact
@@ -300,7 +374,10 @@ export type AgentFact =
   | OrganizationSectorFact
   | CriticalFunctionFact
   | ProcurementFact
-  | LobbyingFact;
+  | LobbyingFact
+  | FinanceInstitutionFact
+  | ScaleStatementFact
+  | ExternalIdentifierFact;
 
 /** Reference to an entity that must be resolved (never merged on name alone). */
 export interface EntityRef {

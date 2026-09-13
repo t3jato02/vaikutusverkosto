@@ -301,6 +301,10 @@ model Entity {
   lobbyingTargetEngagements     LobbyingEngagement[] @relation("LobbyingTarget")
   appointedPositions            Position[] @relation("PositionAppointedBy")
 
+  // Institutional power — finance, capital & board networks (stream: finance).
+  financeProfiles FinanceInstitutionProfile[] @relation("FinanceInstitutionEntity")
+  scaleStatements InstitutionScaleStatement[] @relation("ScaleStatementEntity")
+
   @@index([canonicalName])
   @@index([type, status])
   @@index([municipality])
@@ -1570,6 +1574,10 @@ model Source {
   procurementContracts        ProcurementContract[] @relation("ProcurementSource")
   lobbyingEngagements         LobbyingEngagement[] @relation("LobbyingSource")
 
+  // Institutional power — finance (stream: finance).
+  financeInstitutionProfiles FinanceInstitutionProfile[] @relation("FinanceInstitutionSource")
+  scaleStatements            InstitutionScaleStatement[] @relation("ScaleStatementSource")
+
   @@unique([sourceUrl])
   @@index([sourceType])
 }
@@ -2379,4 +2387,117 @@ model LobbyingEngagement {
   @@index([organizationEntityId])
   @@index([targetEntityId])
   @@index([periodStart])
+}
+
+// ================================================================ institutional power — finance, capital & board networks
+//
+// Finance stream: the people and organisations controlling substantial
+// financial resources or important financial infrastructure (banks, credit
+// institutions, investment firms, asset managers, insurers, pension insurers,
+// public pension institutions, payment/stock-exchange infrastructure, and
+// public investment organisations such as Solidium and Finnvera).
+//
+// Classification and scale facts are SOURCE-BOUND. Institutional figures
+// (AUM, balance sheet, investment assets, revenue) are stored with their year
+// and source and are NEVER used to estimate personal wealth.
+
+// Kind of financial institution (finance stream). A descriptive, source-backed
+// classification of what the institution IS — never an influence signal.
+enum FinanceInstitutionType {
+  BANK
+  CREDIT_INSTITUTION
+  SAVINGS_BANK
+  COOPERATIVE_BANK
+  INVESTMENT_FIRM
+  INVESTMENT_BANK
+  ASSET_MANAGER
+  FUND_MANAGER
+  LIFE_INSURANCE_COMPANY
+  NON_LIFE_INSURANCE_COMPANY
+  PENSION_INSURER
+  PUBLIC_PENSION_INSTITUTION
+  PAYMENT_INSTITUTION
+  E_MONEY_INSTITUTION
+  CENTRAL_SECURITIES_DEPOSITORY
+  STOCK_EXCHANGE
+  CENTRAL_COUNTERPARTY
+  CENTRAL_BANK
+  FINANCIAL_SUPERVISORY_AUTHORITY
+  INSTITUTIONAL_INVESTOR
+  SOVEREIGN_INVESTMENT_INSTITUTION
+  PUBLIC_FINANCING_INSTITUTION
+  DEVELOPMENT_FINANCE_INSTITUTION
+  EXPORT_CREDIT_AGENCY
+  STATE_INVESTMENT_COMPANY
+  FINANCIAL_GROUP
+  OTHER
+}
+
+// What kind of institutional-scale figure a scale statement records.
+// Institutional figures stay institutional — never projected onto individuals.
+enum ScaleMetricType {
+  ASSETS_UNDER_MANAGEMENT // hallinnoitavat varat
+  BALANCE_SHEET_TOTAL // taseen loppusumma (total assets)
+  INVESTMENT_ASSETS // sijoitussalkku / sijoitusvarallisuus
+  EQUITY_CAPITAL // oma pääoma
+  REVENUE // liikevaihto
+  PREMIUM_INCOME // vakuutusmaksutulo
+  PENSION_ASSETS // eläkevastuuvarat
+  OTHER
+}
+
+// Source-bound finance-institution profile. One row per (entity, type); a bank
+// group may carry several types (BANK + FINANCIAL_GROUP). The LEI and BIC are
+// mirrored as ExternalIdentifier rows (providers `gleif-lei` / `swift-bic`) so
+// resolution and cross-stream joins stay deterministic.
+model FinanceInstitutionProfile {
+  id                   String                @id @default(uuid()) @db.Uuid
+  entityId             String                @db.Uuid
+  entity               Entity                @relation("FinanceInstitutionEntity", fields: [entityId], references: [id], onDelete: Cascade)
+  institutionType      FinanceInstitutionType
+  finFsaRegistrationId String? // FIN-FSA register id, when the institution is supervised
+  lei                  String? // GLEIF Legal Entity Identifier
+  bic                  String? // SWIFT/BIC code
+  officialUrl          String?
+  sourceId             String?               @db.Uuid
+  source               Source?               @relation("FinanceInstitutionSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  evidenceGrade        EvidenceGrade         @default(C)
+  validFrom            DateTime?             @db.Date
+  validTo              DateTime?             @db.Date
+  createdBy            String?
+  lastVerifiedAt       DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@unique([entityId, institutionType])
+  @@index([institutionType])
+  @@index([finFsaRegistrationId])
+  @@index([lei])
+  @@index([bic])
+}
+
+// A year-bound institutional scale figure stated by the organisation's own
+// annual report / financial statements. Always stores year + source. Never
+// projected backwards or summed into a personal-wealth estimate.
+model InstitutionScaleStatement {
+  id                 String                @id @default(uuid()) @db.Uuid
+  entityId           String                @db.Uuid
+  entity             Entity                @relation("ScaleStatementEntity", fields: [entityId], references: [id], onDelete: Cascade)
+  metricType         ScaleMetricType
+  value              Decimal               @db.Decimal(18, 2)
+  currency           String                @default("EUR")
+  year               Int
+  sourceId           String?               @db.Uuid
+  source             Source?               @relation("ScaleStatementSource", fields: [sourceId], references: [id], onDelete: SetNull)
+  evidenceGrade      EvidenceGrade         @default(C)
+  verificationStatus VerificationStatus    @default(AUTO_DETECTED)
+  dedupeKey          String?               @unique
+  createdBy          String?
+  lastVerifiedAt     DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([entityId, metricType, year])
+  @@index([metricType, year])
+  @@index([entityId, metricType])
 }

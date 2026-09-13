@@ -1,4 +1,4 @@
-import { EntityType, RelationshipType, FlowType, Confidence, ChangeEventType, FundingType, RoleType, Sector, CriticalFunction, ProcurementProcedure, OwnershipCalculationStatus } from "@prisma/client";
+import { EntityType, RelationshipType, FlowType, Confidence, ChangeEventType, FundingType, RoleType, Sector, CriticalFunction, ProcurementProcedure, OwnershipCalculationStatus, FinanceInstitutionType, ScaleMetricType } from "@prisma/client";
 
 type Label = { fi: string; en: string; sv?: string };
 
@@ -287,6 +287,61 @@ export const OWNERSHIP_CALCULATION_STATUS_LABELS: Record<OwnershipCalculationSta
   CALCULATED: { fi: "Laskennallinen", en: "Calculated" },
   UNKNOWN: { fi: "Tarkkuus ei tiedossa", en: "Precision unknown" },
 };
+
+// ---------------------------------------------------------------- finance, capital & board networks (finance stream)
+
+// Kind of financial institution. A descriptive, source-backed classification of
+// what the institution IS — never an influence or ideology signal.
+export const FINANCE_INSTITUTION_TYPE_LABELS: Record<FinanceInstitutionType, Label> = {
+  BANK: { fi: "Pankki", en: "Bank" },
+  CREDIT_INSTITUTION: { fi: "Luottolaitos", en: "Credit institution" },
+  SAVINGS_BANK: { fi: "Säästöpankki", en: "Savings bank" },
+  COOPERATIVE_BANK: { fi: "Osuuspankki", en: "Cooperative bank" },
+  INVESTMENT_FIRM: { fi: "Sijoituspalveluyritys", en: "Investment firm" },
+  INVESTMENT_BANK: { fi: "Investointipankki", en: "Investment bank" },
+  ASSET_MANAGER: { fi: "Varainhoitaja", en: "Asset manager" },
+  FUND_MANAGER: { fi: "Rahastoyhtiö", en: "Fund manager" },
+  LIFE_INSURANCE_COMPANY: { fi: "Henkivakuutusyhtiö", en: "Life insurance company" },
+  NON_LIFE_INSURANCE_COMPANY: { fi: "Vahinkovakuutusyhtiö", en: "Non-life insurance company" },
+  PENSION_INSURER: { fi: "Työeläkevakuutusyhtiö", en: "Pension insurer" },
+  PUBLIC_PENSION_INSTITUTION: { fi: "Julkinen eläkelaitos", en: "Public pension institution" },
+  PAYMENT_INSTITUTION: { fi: "Maksulaitos", en: "Payment institution" },
+  E_MONEY_INSTITUTION: { fi: "Sähkörahalaitos", en: "E-money institution" },
+  CENTRAL_SECURITIES_DEPOSITORY: { fi: "Arvopaperikeskus", en: "Central securities depository" },
+  STOCK_EXCHANGE: { fi: "Pörssi", en: "Stock exchange" },
+  CENTRAL_COUNTERPARTY: { fi: "Keskuosapuoli", en: "Central counterparty" },
+  CENTRAL_BANK: { fi: "Keskuspankki", en: "Central bank" },
+  FINANCIAL_SUPERVISORY_AUTHORITY: { fi: "Finanssivalvontaviranomainen", en: "Financial supervisory authority" },
+  INSTITUTIONAL_INVESTOR: { fi: "Instituutiosijoittaja", en: "Institutional investor" },
+  SOVEREIGN_INVESTMENT_INSTITUTION: { fi: "Valtion sijoitusinstituutio", en: "Sovereign investment institution" },
+  PUBLIC_FINANCING_INSTITUTION: { fi: "Julkinen rahoituslaitos", en: "Public financing institution" },
+  DEVELOPMENT_FINANCE_INSTITUTION: { fi: "Kehitysrahoituslaitos", en: "Development finance institution" },
+  EXPORT_CREDIT_AGENCY: { fi: "Vientitakuulaitos", en: "Export credit agency" },
+  STATE_INVESTMENT_COMPANY: { fi: "Valtion sijoitusyhtiö", en: "State investment company" },
+  FINANCIAL_GROUP: { fi: "Finanssiryhmä", en: "Financial group" },
+  OTHER: { fi: "Muu rahoituslaitos", en: "Other financial institution" },
+};
+
+// Institutional scale figure (AUM, balance sheet, investment assets, revenue…).
+// Always stored with a year and a source; never used for personal-wealth estimates.
+export const SCALE_METRIC_TYPE_LABELS: Record<ScaleMetricType, Label> = {
+  ASSETS_UNDER_MANAGEMENT: { fi: "Hallinnoitavat varat", en: "Assets under management" },
+  BALANCE_SHEET_TOTAL: { fi: "Taseen loppusumma", en: "Total assets (balance sheet)" },
+  INVESTMENT_ASSETS: { fi: "Sijoitusvarallisuus", en: "Investment assets" },
+  EQUITY_CAPITAL: { fi: "Oma pääoma", en: "Equity capital" },
+  REVENUE: { fi: "Liikevaihto", en: "Revenue" },
+  PREMIUM_INCOME: { fi: "Maksutulo", en: "Premium income" },
+  PENSION_ASSETS: { fi: "Eläkevastuuvarat", en: "Pension assets" },
+  OTHER: { fi: "Muu laajuustieto", en: "Other scale figure" },
+};
+
+export function financeInstitutionTypeLabel(type: FinanceInstitutionType | string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  return FINANCE_INSTITUTION_TYPE_LABELS[type as FinanceInstitutionType]?.[lang] ?? String(type ?? "").toLowerCase();
+}
+
+export function scaleMetricTypeLabel(type: ScaleMetricType | string | null | undefined, lang: "fi" | "en" = "fi"): string {
+  return SCALE_METRIC_TYPE_LABELS[type as ScaleMetricType]?.[lang] ?? String(type ?? "").toLowerCase();
+}
 
 export function roleTypeLabel(type: RoleType | string | null | undefined, lang: "fi" | "en" = "fi"): string {
   return ROLE_TYPE_LABELS[type as RoleType]?.[lang] ?? String(type ?? "").toLowerCase();
