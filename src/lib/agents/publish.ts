@@ -5,7 +5,8 @@
 // by design; adapters must route writes through this module.
 
 import type { PrismaClient, SourceType, RelationshipType, FlowType, FundingType, Confidence, EntityStatus, VerificationStatus } from "@prisma/client";
-import type { RunContext, ProposedFact, RoleAssignmentFact, OrganizationSectorFact, CriticalFunctionFact, ProcurementFact, LobbyingFact, EntityRef, BenefitEventFact, StatementItemFact } from "./types";
+import { Prisma } from "@prisma/client";
+import type { RunContext, ProposedFact, RoleAssignmentFact, OrganizationSectorFact, CriticalFunctionFact, ProcurementFact, LobbyingFact, FinanceInstitutionFact, ScaleStatementFact, ExternalIdentifierFact, EntityRef, BenefitEventFact, StatementItemFact } from "./types";
 import { resolveEntity } from "./entityResolution";
 import { confidenceToScore, deriveAgentStatus } from "@/lib/verification";
 import { deriveTemporalState } from "@/lib/temporal";
@@ -779,6 +780,217 @@ export async function publishLobbying(ctx: RunContext, fact: LobbyingFact): Prom
   }
   ctx.stats.candidates++;
   return { action: "review" };
+}
+
+// ---------------------------------------------------------------- finance institution profile
+
+export async function publishFinanceInstitution(ctx: RunContext, fact: FinanceInstitutionFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.organization?.name) return reject(ctx, "finance-institution without organisation");
+  if (!fact.institutionType) return reject(ctx, "finance-institution without institutionType");
+  if (!fact.evidenceUrl) return reject(ctx, "finance-institution without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+
+  const org = await resolveRequiredEntity(ctx.db, fact.organization);
+  if (org.blocker) return reject(ctx, `organization ${org.blocker}`);
+  const source = await institutionalSource(ctx, fact);
+  const autoPublish = institutionalAutoPublish(fact.extractionMethod, fact.sourceType, fact.confidence);
+
+  const existing = await ctx.db.financeInstitutionProfile.findUnique({
+    where: { entityId_institutionType: { entityId: org.id, institutionType: fact.institutionType } },
+  });
+  if (existing) {
+    const changed =
+      (existing.lei ?? null) !== (fact.lei ?? null) ||
+      (existing.bic ?? null) !== (fact.bic ?? null) ||
+      (existing.finFsaRegistrationId ?? null) !== (fact.finFsaRegistrationId ?? null);
+    if (!changed) {
+      await ctx.db.financeInstitutionProfile.update({ where: { id: existing.id }, data: { lastVerifiedAt: new Date() } });
+      ctx.stats.updated++;
+      return autoPublish ? { action: "unchanged" } : { action: "review" };
+    }
+    await ctx.db.financeInstitutionProfile.update({
+      where: { id: existing.id },
+      data: {
+        lei: fact.lei ?? null,
+        bic: fact.bic ?? null,
+        finFsaRegistrationId: fact.finFsaRegistrationId ?? null,
+        officialUrl: fact.officialUrl ?? existing.officialUrl,
+        sourceId: source.id,
+        evidenceGrade: fact.evidenceGrade ?? existing.evidenceGrade,
+        lastVerifiedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    ctx.stats.updated++;
+    return autoPublish ? { action: "updated" } : { action: "review" };
+  }
+
+  await ctx.db.financeInstitutionProfile.create({
+    data: {
+      entityId: org.id,
+      institutionType: fact.institutionType,
+      finFsaRegistrationId: fact.finFsaRegistrationId ?? null,
+      lei: fact.lei ?? null,
+      bic: fact.bic ?? null,
+      officialUrl: fact.officialUrl ?? null,
+      sourceId: source.id,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      validFrom: fact.validFrom ?? null,
+      validTo: fact.validTo ?? null,
+      createdBy: ctx.agentId,
+      lastVerifiedAt: new Date(),
+    },
+  });
+
+  // Mirror strong identifiers so cross-stream resolution is deterministic:
+  // GLEIF LEI (`gleif-lei`) and SWIFT/BIC (`swift-bic`) both point at this
+  // entity, so the GLEIF resolver and other streams never duplicate it.
+  if (fact.lei) {
+    await ctx.db.externalIdentifier.upsert({
+      where: { provider_identifier: { provider: "gleif-lei", identifier: fact.lei } },
+      update: { entityId: org.id },
+      create: { provider: "gleif-lei", identifier: fact.lei, entityId: org.id },
+    });
+  }
+  if (fact.bic) {
+    await ctx.db.externalIdentifier.upsert({
+      where: { provider_identifier: { provider: "swift-bic", identifier: fact.bic } },
+      update: { entityId: org.id },
+      create: { provider: "swift-bic", identifier: fact.bic, entityId: org.id },
+    });
+  }
+  for (const alias of fact.aliases ?? []) {
+    if (!alias.trim() || alias.trim() === fact.organization.name) continue;
+    await ctx.db.entityAlias.upsert({
+      where: { entityId_name_aliasType: { entityId: org.id, name: alias.trim(), aliasType: "NAME_VARIANT" } },
+      update: {},
+      create: { entityId: org.id, name: alias.trim(), aliasType: "NAME_VARIANT" },
+    });
+  }
+
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created" };
+  }
+  ctx.stats.candidates++;
+  return { action: "review" };
+}
+
+// ---------------------------------------------------------------- institutional scale statement
+
+export async function publishScaleStatement(ctx: RunContext, fact: ScaleStatementFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.entity?.name) return reject(ctx, "scale-statement without organisation");
+  if (!fact.metricType) return reject(ctx, "scale-statement without metricType");
+  if (!fact.year || fact.year < 1900 || fact.year > 2100) return reject(ctx, "scale-statement with invalid year");
+  if (!Number.isFinite(fact.value) || fact.value < 0 || Math.abs(fact.value) > MAX_AMOUNT)
+    return reject(ctx, "scale-statement value out of bounds");
+  if (!fact.currency) return reject(ctx, "scale-statement without currency");
+  if (!fact.evidenceUrl) return reject(ctx, "scale-statement without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+
+  const org = await resolveRequiredEntity(ctx.db, fact.entity);
+  if (org.blocker) return reject(ctx, `entity ${org.blocker}`);
+  const source = await institutionalSource(ctx, fact);
+  const autoPublish = institutionalAutoPublish(fact.extractionMethod, fact.sourceType, fact.confidence);
+  const verificationStatus: VerificationStatus = autoPublish
+    ? deriveAgentStatus({ sourceType: fact.sourceType, confidence: fact.confidence })
+    : "AUTO_DETECTED";
+
+  const existing = await ctx.db.institutionScaleStatement.findUnique({
+    where: { entityId_metricType_year: { entityId: org.id, metricType: fact.metricType, year: fact.year } },
+  });
+  if (existing) {
+    const changed = Number(existing.value) !== fact.value;
+    if (!changed) {
+      await ctx.db.institutionScaleStatement.update({ where: { id: existing.id }, data: { lastVerifiedAt: new Date() } });
+      ctx.stats.updated++;
+      return autoPublish ? { action: "unchanged" } : { action: "review" };
+    }
+    await ctx.db.institutionScaleStatement.update({
+      where: { id: existing.id },
+      data: {
+        value: fact.value,
+        sourceId: source.id,
+        evidenceGrade: fact.evidenceGrade ?? existing.evidenceGrade,
+        verificationStatus,
+        lastVerifiedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    ctx.stats.updated++;
+    return autoPublish ? { action: "updated" } : { action: "review" };
+  }
+
+  await ctx.db.institutionScaleStatement.create({
+    data: {
+      entityId: org.id,
+      metricType: fact.metricType,
+      value: fact.value,
+      currency: fact.currency,
+      year: fact.year,
+      sourceId: source.id,
+      evidenceGrade: fact.evidenceGrade ?? "C",
+      verificationStatus,
+      dedupeKey: fact.dedupeKey ?? null,
+      createdBy: ctx.agentId,
+      lastVerifiedAt: new Date(),
+    },
+  });
+  if (autoPublish) {
+    ctx.stats.created++;
+    return { action: "created" };
+  }
+  ctx.stats.candidates++;
+  return { action: "review" };
+}
+
+// ---------------------------------------------------------------- external identifier
+
+export async function publishExternalIdentifier(ctx: RunContext, fact: ExternalIdentifierFact): Promise<InstitutionalPublicationResult> {
+  if (!fact.entity?.name) return reject(ctx, "external-identifier without entity");
+  if (!fact.provider?.trim() || !fact.identifier?.trim()) return reject(ctx, "external-identifier without provider/identifier");
+  if (!fact.evidenceUrl) return reject(ctx, "external-identifier without evidence URL");
+  if (fact.confidence === "LOW") return reject(ctx, "LOW confidence not published by default");
+
+  const entity = await resolveRequiredEntity(ctx.db, fact.entity);
+  if (entity.blocker) return reject(ctx, `entity ${entity.blocker}`);
+  const source = await institutionalSource(ctx, fact);
+
+  const provider = fact.provider.trim();
+  const identifier = fact.identifier.trim();
+  const existing = await ctx.db.externalIdentifier.findUnique({
+    where: { provider_identifier: { provider, identifier } },
+  });
+  if (existing && existing.entityId !== entity.id) {
+    // The same strong identifier already points at a DIFFERENT entity. Never
+    // guess — park the collision for review (duplicate resolution candidates).
+    await ctx.db.entityResolutionCandidate.create({
+      data: {
+        refName: fact.entity.name,
+        refType: fact.entity.type,
+        refJurisdiction: fact.entity.jurisdiction ?? null,
+        refExternalProvider: provider,
+        refExternalIdentifier: identifier,
+        candidateEntityIds: [existing.entityId, entity.id],
+        context: { provider, identifier } as Prisma.InputJsonValue,
+      },
+    });
+    return reject(ctx, `external-identifier collision (${provider}:${identifier})`);
+  }
+  if (!existing) {
+    await ctx.db.externalIdentifier.create({ data: { provider, identifier, entityId: entity.id } });
+  }
+  for (const alias of fact.aliases ?? []) {
+    if (!alias.trim() || alias.trim() === fact.entity.name) continue;
+    await ctx.db.entityAlias.upsert({
+      where: { entityId_name_aliasType: { entityId: entity.id, name: alias.trim(), aliasType: "NAME_VARIANT" } },
+      update: {},
+      create: { entityId: entity.id, name: alias.trim(), aliasType: "NAME_VARIANT" },
+    });
+  }
+  void source;
+  ctx.stats.created++;
+  return { action: existing ? "unchanged" : "created" };
 }
 
 async function upsertFlow(

@@ -11,6 +11,9 @@ import { vnkOwnershipAdapter } from "./vnkOwnership";
 import { yleAdapter } from "./yle";
 import { awardAdapter } from "./awards";
 import { giftBenefitAdapter } from "./gifts";
+import { financeInstitutionsAdapter } from "./financeInstitutions";
+import { pensionGovernanceAdapter } from "./pensionGovernance";
+import { gleifResolutionAdapter } from "./gleifResolution";
 
 const REGISTRY: Record<string, SourceAdapter> = {};
 
@@ -37,6 +40,9 @@ register(vnkOwnershipAdapter);
 register(yleAdapter);
 register(awardAdapter);
 register(giftBenefitAdapter);
+register(financeInstitutionsAdapter);
+register(pensionGovernanceAdapter);
+register(gleifResolutionAdapter);
 
 export const SCHEDULES: Record<string, string> = {
   daily: "0 4 * * *", // 04:00 UTC

@@ -6,7 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { MAX_RUN_MINUTES, type RunContext, type RunReport, type SourceAdapter } from "./types";
 import { TransientError, sleep } from "./http";
-import { ensureSource, markSourceFailure, markSourceSuccess, publishVerifiedFact, publishBenefitEvent, publishStatementItem, publishRoleAssignment, publishOrganizationSector, publishCriticalFunction, publishProcurement, publishLobbying } from "./publish";
+import { ensureSource, markSourceFailure, markSourceSuccess, publishVerifiedFact, publishBenefitEvent, publishStatementItem, publishRoleAssignment, publishOrganizationSector, publishCriticalFunction, publishProcurement, publishLobbying, publishFinanceInstitution, publishScaleStatement, publishExternalIdentifier } from "./publish";
 import { ensureRegistrySource, isSourceEnabled, recordRegistryCheck } from "./sourceRegistry";
 import { collect, markDocumentProcessed } from "@/lib/ingestion/collector";
 import type { DocumentDescriptor } from "@/lib/ingestion/types";
@@ -224,6 +224,21 @@ export async function runAgent(adapter: SourceAdapter, opts: RunOptions = {}): P
           if (fact.kind === "lobbying") {
             const res = await publishLobbying(ctx, fact);
             if (res.action === "rejected") ctx.log(`rejected lobbying: ${res.reason}`);
+            continue;
+          }
+          if (fact.kind === "finance-institution") {
+            const res = await publishFinanceInstitution(ctx, fact);
+            if (res.action === "rejected") ctx.log(`rejected finance-institution: ${res.reason}`);
+            continue;
+          }
+          if (fact.kind === "scale-statement") {
+            const res = await publishScaleStatement(ctx, fact);
+            if (res.action === "rejected") ctx.log(`rejected scale-statement: ${res.reason}`);
+            continue;
+          }
+          if (fact.kind === "external-identifier") {
+            const res = await publishExternalIdentifier(ctx, fact);
+            if (res.action === "rejected") ctx.log(`rejected external-identifier: ${res.reason}`);
             continue;
           }
           const proposed = {
